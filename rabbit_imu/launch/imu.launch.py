@@ -34,7 +34,7 @@ def generate_launch_description():
         "frequency", default_value = TextSubstitution(text = "50")
     )
     ros_imu_node = Node(
-        package = 'imu',
+        package = 'rabbit_imu',
         name = 'imu_node',
         executable = 'imu',
         parameters = [{
