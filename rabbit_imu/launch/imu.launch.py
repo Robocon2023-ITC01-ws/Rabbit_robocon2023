@@ -55,6 +55,10 @@ def generate_launch_description():
         reset_orientation_arg,
         frequency_arg,
         ros_imu_node,
+        Node(package='rabbit_localization', executable='localization'),
+        #Node(package='rabbit_can',executable='can'),
+        Node(package='joy', executable='joy_node'),
+        Node(package='rabbit_can', executable='joy'),
     ])
 
 

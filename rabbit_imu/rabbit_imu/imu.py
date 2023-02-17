@@ -3,7 +3,6 @@ import rclpy
 from rclpy.node import Node
 import threading
 from ros_imu_bno055.imu_bno055_api import *
-#import ros_imu_bno055.imu_bno055_api
 import os
 
 # Ros2 message
@@ -26,7 +25,6 @@ class IMU_Node(Node):
 
         # Create an IMU instant
         self.bno055 = BoschIMU(port = self.serial_port)
-
 
         # Internal variables
         self.imu_data_seq_counter = 0
@@ -132,6 +130,7 @@ class IMU_Node(Node):
         else:
             self.get_logger().warn("Reset IMU failed")
 
+
     def euler_from_quaternion(self, x, y, z, w):
         t0 = 2 * (w * x + y * z)
         t1 = 1 - 2 * (x * x + y * y)
@@ -145,7 +144,7 @@ class IMU_Node(Node):
         t3 = 2 * (w * z + x * y)
         t4 = 1 - 2 * (y * y + z * z)
         yaw = -math.atan2(t3, t4)
-        return row, pitch, yaw
+        return roll, pitch, yaw
 
     def quaternion_from_euler(self, roll, pitch, yaw):
         q0 = np.sin(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) - np.cos(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
@@ -162,8 +161,8 @@ class IMU_Node(Node):
         imu_data.z = euler[0]
         if self.reset_orientation ==True:
             self.reset_imu()
-        
         # Configuration is necessary everytinr the IMU is turned on or reset
+        #self.set_imu_configuration()
         if self.stop_request == False:
                 self.bno055.update_imu_data()
                 self.imu_pub.publish(imu_data)
