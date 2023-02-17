@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'can = rabbit_can.can_pubsub:main'
+            'can = rabbit_can.can_pubsub:main',
+            'joy = rabbit_can.teleop_joy:main',
         ],
     },
 )
