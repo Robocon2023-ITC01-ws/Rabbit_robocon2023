@@ -1,11 +1,11 @@
 from setuptools import setup
 
 package_name = 'elephant_localization'
-
+package_name_in = 'model'
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],
+    packages=[package_name, package_name_in],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'localization = elephant_localization.mhe_pubsub:main',
         ],
     },
 )
