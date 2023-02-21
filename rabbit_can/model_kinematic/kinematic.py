@@ -22,7 +22,7 @@ class kinematic():
         J = (self.wheel_radius/4)*np.array([
             [1, -1, -1, 1],
             [1, 1, -1, -1],
-            [w1/(self.Lxl + self.Ly), w2/(self.Lxl + self.Ly), w3(self.Lxl + self.Ly),w4/(self.Lxl + self.Ly)]
+            [w1/(self.Lxl + self.Ly), w2/(self.Lxl + self.Ly), w3/(self.Lxl + self.Ly),w4/(self.Lxl + self.Ly)]
         ])
         vec = J @ np.array([w1, w2, w3, w4])
         return vec[0], vec[1], vec[2]

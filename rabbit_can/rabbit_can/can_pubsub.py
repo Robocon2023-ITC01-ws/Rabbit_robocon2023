@@ -25,6 +25,7 @@ class ros_node(Node):
         self.kinematic = kinematic()
 
         # ==== Back data ====
+        #self.wheel_vel = [32768,32768,32768,32768]
         self.wheel_vel = np.zeros(4)
         self.wheel_cal = np.zeros(4)
         self.velocity_callback = np.zeros(4)
@@ -63,21 +64,23 @@ class ros_node(Node):
             can_msg = self.bus.recv(0.1)
             if (can_msg.arbitration_id != None):
                 if can_msg.arbitration_id == 0x155:
-                    self.wheel_vel[0] = (self.msg.data[0] << 8) + self.msg.data[1]
-                    self.wheel_vel[1] = (self.msg.data[2] << 8) + self.msg.data[3]
-                    self.wheel_cal[0] = float(map(self.wheel_vel[0], 0, 65535, -100, 100))
-                    self.wheel_cal[1] = float(map(self.wheel_vel[1], 0, 65535, -100, 100))
+                    self.wheel_vel[0] = (can_msg.data[0] << 8) + can_msg.data[1]
+                    self.wheel_vel[1] = (can_msg.data[2] << 8) + can_msg.data[3]
+                    self.wheel_cal[0] = float(self.kinematic.map(self.wheel_vel[0], 0, 65535, -100, 100))
+                    self.wheel_cal[1] = float(self.kinematic.map(self.wheel_vel[1], 0, 65535, -100, 100))
 
                 elif can_msg.arbitration_id == 0x140:
-                    self.wheel_vel[2] = (self.msg.data[0] << 8) + self.msg.data[1]
-                    self.wheel_vel[3] = (self.msg.data[2] << 8) + self.msg.data[3]
-                    self.wheel_cal[2] = float(map(self.wheel_vel[2], 0, 65535, -100, 100))
-                    self.wheel_cal[3] = float(map(self.wheel_vel[3], 0, 65535, -100, 100))
+                    self.wheel_vel[2] = (can_msg.data[0] << 8) + can_msg.data[1]
+                    self.wheel_vel[3] = (can_msg.data[2] << 8) + can_msg.data[3]
+                    self.wheel_cal[2] = float(self.kinematic.map(self.wheel_vel[2], 0, 65535, -100, 100))
+                    self.wheel_cal[3] = float(self.kinematic.map(self.wheel_vel[3], 0, 65535, -100, 100))
 
                 self.velocity_callback = self.wheel_cal
+                #print(self.velocity_callback)
         for i in range(len(self.velocity_callback)):
-            if(self.velocity_callback[i] <= 0.002289 and self.velocity_callback[i] >= -0.002289):
+            if(self.velocity_callback[i] <= 0.00153 and self.velocity_callback[i] >= -0.00153):
                 self.velocity_callback[i] = 0.0
+        print(self.velocity_callback)
         self.command_vel[0], self.command_vel[1], self.command_vel[2] = self.kinematic.mecanum_forward_kinematic(self.velocity_callback[0], self.velocity_callback[1], self.velocity_callback[2], self.velocity_callback[3])
 
     def velocity(self):
