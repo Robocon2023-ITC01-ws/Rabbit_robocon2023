@@ -23,8 +23,8 @@ def generate_launch_description():
     )
 
     baud_arg = DeclareLaunchArgument(
-        #"baud", default_value= TextSubstitution(text = "921600")
-        "baud", default_value= TextSubstitution(text = "115200")
+        "baud", default_value= TextSubstitution(text = "921600")
+        #"baud", default_value= TextSubstitution(text = "115200")
     )
 
     imu_topic_arg = DeclareLaunchArgument(

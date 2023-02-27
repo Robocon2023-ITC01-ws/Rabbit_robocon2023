@@ -68,10 +68,10 @@ namespace FDILink
         uint8_t check_head[1] = {0xff};
         size_t head_s = serial_.read(check_head, 1);
         if (if_debug_){
-        if (head_s != 1)
-        {
-            RCLCPP_ERROR(this->get_logger(),"Read serial port time out! can't read pack head.");
-        }
+            if (head_s != 1)
+            {
+                RCLCPP_ERROR(this->get_logger(),"Read serial port time out! can't read pack head.");
+            }
         std::cout << std::endl;
         std::cout << "check_head: " << std::hex << (int)check_head[0] << std::dec << std::endl;
         }
@@ -122,7 +122,7 @@ namespace FDILink
             }
             sn_lost_ += 256 - (int)(read_sn_ - ground_sn[0]);
             read_sn_ = ground_sn[0];
-            continue;
+            //continue;
             }
             else
             {
@@ -131,7 +131,7 @@ namespace FDILink
             }
             sn_lost_ += (int)(ground_sn[0] - read_sn_);
             read_sn_ = ground_sn[0];
-             continue;
+             //continue;
             }
         }
         uint8_t ground_ignore[500];
