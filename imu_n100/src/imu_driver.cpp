@@ -19,9 +19,6 @@ namespace FDILink
         // Publisher
         imu_pub = this->create_publisher<sensor_msgs::msg::Imu>(imu_topic_.c_str(), 10);
         mag_pose_pub = this->create_publisher<geometry_msgs::msg::Pose2D>(mag_pose_2d_topic_.c_str(), 10);
-        //imu_timer = this->create_wall_timer(2.5ms, std::bind(&ahrsBringup::imu_callback, this));
-        // mag_pose_timer = this->create_wall_timer(2.5ms, std::bind(&ahrsBringup::mag_pose_callback, this));
-
         try
         {
             serial_.setPort(serial_port_);
@@ -49,7 +46,6 @@ namespace FDILink
             exit(0);
         }
         imu_callback();
-        
     }
 
     ahrsBringup::~ahrsBringup()
@@ -87,11 +83,11 @@ namespace FDILink
         uint8_t head_type[1] = {0xff};
         size_t type_s = serial_.read(head_type, 1);
         if (if_debug_){
-        std::cout << "head_type:  " << std::hex << (int)head_type[0] << std::dec << std::endl;
+            std::cout << "head_type:  " << std::hex << (int)head_type[0] << std::dec << std::endl;
         }
         if (head_type[0] != TYPE_IMU && head_type[0] != TYPE_AHRS && head_type[0] != TYPE_INSGPS && head_type[0] != 0x50 && head_type[0] != TYPE_GROUND)
         {
-            //RCLCPP_WARN(this->get_logger(), "head_type error: %02X",head_type[0]);
+            RCLCPP_WARN(this->get_logger(), "head_type error: %02X",head_type[0]);
             continue;
         }
         //check head length
@@ -392,10 +388,6 @@ namespace FDILink
         
         }
     }
-
-    // void ahrsBringup::mag_pose_callback()
-    // {
-    // }
 
     void ahrsBringup::magCalculateYaw(double roll, double pitch, double &magyaw, double magx, double magy, double magz)
     {

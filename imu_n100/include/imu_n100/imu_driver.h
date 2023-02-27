@@ -46,8 +46,6 @@ class ahrsBringup : public rclcpp::Node
     bool checkCS16(int len);
     void checkSN(int type);
     void magCalculateYaw(double roll, double pitch, double &magyaw, double magx, double magy, double magz); 
-    
-
 
     private:
     bool if_debug_;
