@@ -1,0 +1,14 @@
+path: home/kenotic/ros2dnn_ws/src/cv_robocon2023/cv_robocon2023/data/pole_datasets/data
+train: home/kenotic/ros2dnn_ws/src/cv_robocon2023/cv_robocon2023/data/pole_datasets/train/images
+val: home/kenotic/ros2dnn_ws/src/cv_robocon2023/cv_robocon2023/data/pole_datasets/valid/images
+test: home/kenotic/ros2dnn_ws/src/cv_robocon2023/cv_robocon2023/data/pole_datasets/test/images
+
+nc: 1
+names: ['pole']
+
+roboflow:
+  workspace: din-sokheng-pfxmb
+  project: pole_detection-e9drj
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/din-sokheng-pfxmb/pole_detection-e9drj/dataset/2

@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['pole']
+
+roboflow:
+  workspace: din-sokheng-pfxmb
+  project: pole_detection-e9drj
+  version: 2
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/din-sokheng-pfxmb/pole_detection-e9drj/dataset/2
