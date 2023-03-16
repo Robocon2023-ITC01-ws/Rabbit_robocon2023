@@ -77,7 +77,6 @@ class Yolov5:
         self.img_size = check_img_size(img_size, s=self.stride)
         
         self.dt, self.seen = [0.0, 0.0, 0.0], 0
-
         # Dataloader
         self.bs = 1 # batch_size
     def image_detect(self, image_raw):
@@ -87,6 +86,7 @@ class Yolov5:
 
             # if not depth: continue
         
+        print(self.names)
         self.stride = 32  # stride
         self.img_size = 288
     
@@ -147,6 +147,8 @@ class Yolov5:
                     # Add bbox to image
                     c = int(cls)  # integer class
                     label = f'{self.names[c]} {conf:.2f}'
+                    if label['value'] is None:
+                        label['value'] = 0
                     annotator.box_label(xyxy, label, color=colors(c, True))
 
                     # print(xyxy, label)
@@ -154,7 +156,7 @@ class Yolov5:
             # Stream results
             im0 = annotator.result()
 
-        return im0
+        return im0, label
      
     
 
@@ -226,13 +228,14 @@ class Yolov5ROS(Node):
     
         image = np.asarray(image)
 
-        result = self.yolov5_node.image_detect(image)
+        result, label = self.yolov5_node.image_detect(image)
 
         image_msg = self.cv_bridge.cv2_to_imgmsg(result, encoding="bgr8")
         
 
         self.detected_publisher.publish(image_msg)
-        self.get_logger().info("Publishing result.....")
+        #self.get_logger().info("Publishing result.....")
+        self.get_logger().info(label)
 
 
 
