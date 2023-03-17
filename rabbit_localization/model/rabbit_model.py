@@ -66,7 +66,6 @@ class RabbitModel():
         return rot
 
     def forward_kinematic(self, v1, v2, v3, v4, angle, type=None):
-
         if type=="sym":
             vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix(type)@ca.vertcat(v1, v2, v3, v4)
         elif type=="numpy":

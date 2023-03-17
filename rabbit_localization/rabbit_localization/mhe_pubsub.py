@@ -59,7 +59,7 @@ class ros_node(Node):
 		# === Add Noise ===
         self.x_noise = np.random.normal(0.001,0.001)
         self.y_noise = np.random.normal(0.001,0.001)
-        self.theta_noise = np.random.normal(np.radians(2), np.radians(0.02))
+        self.theta_noise = np.random.normal(np.radians(5), np.radians(5))
         self.noise = np.array([self.x_noise, self.y_noise, self.theta_noise]).reshape(1,-1)
 
         # ROS2 Publisher and Subscriber
