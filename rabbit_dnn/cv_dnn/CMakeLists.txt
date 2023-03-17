@@ -23,6 +23,76 @@ find_package(sensor_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(realsense2 REQUIRED)
+find_package(tf2_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(pcl_conversions REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(Boost COMPONENTS system REQUIRED)
+find_package(PCL COMPONENTS common REQUIRED)
+find_package(PkgConfig)
+
+pkg_search_module(Eigen3 REQUIRED eigen3)
+
+find_library(realsense2_LIBRARIES realsense2)
+find_path(realsense2_INCLUDE_DIRS librealsense2/rs.hpp)
+
+
+set(DEPENDENCIES
+  rclcpp
+  geometry_msgs
+  nav_msgs
+  sensor_msgs
+  tf2_msgs
+  tf2_ros
+  realsense2
+  pcl_conversions
+  cv_bridge
+  image_transport
+)
+
+
+include_directories(
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${realsense2_INCLUDE_DIRS}
+  ${EIGEN_INCLUDE_DIRS}
+
+)
+
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}/
+)
+
+install(DIRECTORY
+  config
+  DESTINATION share/${PROJECT_NAME}/
+)
+
+
+add_executable(rs_d435_node
+  include/${PROJECT_NAME}/constants.hpp
+  src/camera_node_v2.cpp)
+
+ament_target_dependencies(rs_d435_node ${DEPENDENCIES})
+
+target_link_libraries(rs_d435_node
+  ${Boost_SYSTEM_LIBRARY}  # pcl_conversions requires this
+  ${OpenCV_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${SDL2_LIBRARIES}
+
+)
+
+target_include_directories(rs_d435_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
+install(TARGETS rs_d435_node
+  DESTINATION lib/${PROJECT_NAME})
+
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
