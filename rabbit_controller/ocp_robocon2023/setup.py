@@ -31,7 +31,9 @@ setup(
             "fibonacci_action_server = ocp_robocon2023.fibonacci_action_server:main",
             "fibonacci_action_client = ocp_robocon2023.fibonacci_action_client:main",
             "nmpc_rabbit = ocp_robocon2023.nmpc_rabbit:main",
-            "nmpc_rabbit_v2 = ocp_robocon2023.nmpc_rabbit_v2:main"
+            "nmpc_rabbit_v2 = ocp_robocon2023.nmpc_rabbit_v2:main",
+            "mpc_action_server = ocp_robocon2023.mpc_action_server:main",
+            "mpc_action_client = ocp_robocon2023.mpc_action_client:main"
         ],
     },
 )
