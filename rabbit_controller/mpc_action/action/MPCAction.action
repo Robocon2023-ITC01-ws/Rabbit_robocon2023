@@ -1,0 +1,10 @@
+#Goal Definition
+float32[] goal_states
+---
+#Goal results
+float32[] goal_results
+float32[] input_control
+---
+#Goal Feedback
+float32[] goal_feedback
+
