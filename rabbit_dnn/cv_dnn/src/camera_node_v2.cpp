@@ -60,17 +60,17 @@ class CameraNode: public rclcpp::Node
 
 
 			// Start pipeline
-			rs2::config config;
-			config.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, fps_);
-			if (is_color_ || publish_image_raw_)
-				config.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_RGB8, fps_);
-			pipe_.start(config);
-			RCLCPP_INFO(logger_, "Capture Pipeline started!");
-
+			// Start pipeline with chosen configuration
+    			rs2::config config;
+    			config.enable_stream(RS2_STREAM_DEPTH, 640, 480, RS2_FORMAT_Z16, fps_);
+    			if (is_color_ || publish_image_raw_)
+      				config.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_RGB8, fps_);
+    			pipe_.start(config);
+    			RCLCPP_INFO(logger_, "Capture Pipeline started!");
 			// Publishers
 			if (publish_depth_)
 			{
-				aligh_depth_publisher_ = image_transport::create_publisher(this, "rs_d435i/aligned_depth/image_raw", 10);
+				align_depth_publisher_ = image_transport::create_publisher(this, "rs_d435i/aligned_depth/image_raw");
 				depth_camera_info_publisher_ = this->create_publisher<sensor_msgs::msg::CameraInfo>("rs_d435i/camera_info", 10);
 			}
 
@@ -80,11 +80,11 @@ class CameraNode: public rclcpp::Node
 			}
 			if (publish_image_raw_)
 			{
-				image_raw_publisher_ = image_transport::create_publisher(this, "rs_d435i/camera/image_raw", 10);
+				image_raw_publisher_ = image_transport::create_publisher(this, "rs_d435i/camera/image_raw");
 			}
 
 			// Timer
-			timer_ = this->create_wall_timer(1ms, std::bind(&CameraNode::timer_callback, this));
+			timer_ = this->create_wall_timer(1ms, std::bind(&CameraNode::TimerCallback, this));
 		}
 	private:
 
@@ -126,7 +126,7 @@ class CameraNode: public rclcpp::Node
 			// parameters
 			rs2_format format = RS2_FORMAT_RGB8;
 			rs2_format format_depth = RS2_FORMAT_Z16;
-			std::string encoding = sensor_msgs::image_encoding::RGB8;
+			std::string encoding = sensor_msgs::image_encodings::RGB8;
 			std::string stream_name = "color";
 			std::string module_name = "0";
 
@@ -162,7 +162,7 @@ class CameraNode: public rclcpp::Node
 								// Update calibration data with information
 								UpdateCalibrateData(video_profile);
 								video_profile_ = profile;
-								image_ = cv::Mat(video_profile.with(), video_profile.height(), format, cv::Scalar(0, 0, 0));
+								image_ = cv::Mat(video_profile.width(), video_profile.height(), format, cv::Scalar(0, 0, 0));
 								RCLCPP_INFO(logger_, "%s stream is enabled - width: %d, height: %d, fps: %d", module_name.c_str(), video_profile.width(), video_profile.height(), video_profile.fps());
 								break;
 							}
@@ -192,11 +192,11 @@ class CameraNode: public rclcpp::Node
 			stream_index_pair stream_index{video_profile.stream_type(), video_profile.stream_index()};
 			// Get profile intrinsics and save 
 			auto intrinsic = video_profile.get_intrinsics();
-			strean_intrinsics_ = intrinsic;
+			stream_intrinsics_ = intrinsic;
 			if (stream_index == COLOR)
 			{
 				camera_info_.width = intrinsic.width;
-				camera_info_.height = intrisic.height;
+				camera_info_.height = intrinsic.height;
 				camera_info_.header.frame_id = "camera_d435i";
 				camera_info_.k.at(0) = intrinsic.fx;
 				camera_info_.k.at(2) = intrinsic.ppx;
@@ -234,7 +234,7 @@ class CameraNode: public rclcpp::Node
 
 				for (int i = 0; i < 5; i++)
 				{
-					camera_info_.d.push_back(instrinsic.coeffs[i]);
+					camera_info_.d.push_back(intrinsic.coeffs[i]);
 				}
 
 			}
@@ -297,7 +297,7 @@ class CameraNode: public rclcpp::Node
 			auto bpp = image.get_bytes_per_pixel();
 			auto height = image.get_height();
 			auto width = image.get_width();
-			img->header.stamp = r;
+			img->header.stamp = t;
 			img->width = width;
 			img->height = height;
 			img->is_bigendian = false;
@@ -309,7 +309,7 @@ class CameraNode: public rclcpp::Node
 			camera_info_depth_.header.stamp = t;
 
 			camera_info_publisher_->publish(camera_info_);
-			depth_camera_info_publishr_->publish(camera_info_depth_);
+			depth_camera_info_publisher_->publish(camera_info_depth_);
 
 		}
 
@@ -328,12 +328,14 @@ class CameraNode: public rclcpp::Node
 			if (publish_image_raw_)
 			{
 				auto image_frame = aligned_frameset_.get_color_frame();
-				image_raw = cv::Mat(cv::Size(image_frame.get_width, image_frame.get_height()), CV_8UC3, const_cast<void *>(image_frame.get_data()), cv::Mat::AUTO_STEP);
+				cv::Mat image_raw;
+				image_raw = cv::Mat(cv::Size(image_frame.get_width(), image_frame.get_height()), CV_8UC3, const_cast<void *>(image_frame.get_data()), cv::Mat::AUTO_STEP);
 				sensor_msgs::msg::Image::SharedPtr img_msg;
 				img_msg = cv_bridge::CvImage(
 						std_msgs::msg::Header(), sensor_msgs::image_encodings::RGB8, image_raw).toImageMsg();
 
 				auto bpp = image_frame.get_bytes_per_pixel();
+				auto height = image_frame.get_height();
 				auto width = image_frame.get_width();
 				img_msg->width = width;
 				img_msg->height = height;
@@ -341,7 +343,7 @@ class CameraNode: public rclcpp::Node
 				img_msg->step = width * bpp;
 				img_msg->header.frame_id = "camera_d435i";
 				img_msg->header.stamp = t;
-				image_raw_publisher_->publish(img_msg);
+				image_raw_publisher_.publish(img_msg);
 			}
 
 			unsigned char *color_data = image_.data;
@@ -354,7 +356,7 @@ class CameraNode: public rclcpp::Node
 			msg_pointcloud.is_dense = true;
 			
 			sensor_msgs::PointCloud2Modifier modifier(msg_pointcloud);
-			modifier.setPointCloud2FieldByString(2, "xyz", "rgb");
+			modifier.setPointCloud2FieldsByString(2, "xyz", "rgb");
 			sensor_msgs::PointCloud2Iterator<float> iter_x(msg_pointcloud, "x");
 			sensor_msgs::PointCloud2Iterator<float> iter_y(msg_pointcloud, "y");
 			sensor_msgs::PointCloud2Iterator<float> iter_z(msg_pointcloud, "z");
@@ -365,7 +367,7 @@ class CameraNode: public rclcpp::Node
 
 			float std_nan = std::numeric_limits<float>::quiet_NaN();
 			float depth_point[3], scaled_depth;
-			for (int y = 0; y < depth_intrisics.height; y++)
+			for (int y = 0; y < depth_intrinsics.height; y++)
 			{
 				for (int x = 0; x < depth_intrinsics.width; x++)
 				{
@@ -407,7 +409,7 @@ class CameraNode: public rclcpp::Node
 			if (rs2::video_frame image_frame = aligned_frameset_.first_or_default(RS2_STREAM_COLOR))
 			{
 				cv::Mat image_raw;
-				image_raw = cv::Mat(cv::Size(image_frame.get_width(), image_frame.get_height()), CV_8UC3, const_cast<void *>(image_frame.get_Data()), cv::Mat::AUTO_STEP);
+				image_raw = cv::Mat(cv::Size(image_frame.get_width(), image_frame.get_height()), CV_8UC3, const_cast<void *>(image_frame.get_data()), cv::Mat::AUTO_STEP);
 				sensor_msgs::msg::Image::SharedPtr img_msg;
 				img_msg = cv_bridge::CvImage(
 						std_msgs::msg::Header(), sensor_msgs::image_encodings::RGB8, image_raw).toImageMsg();
@@ -417,7 +419,7 @@ class CameraNode: public rclcpp::Node
 				img_msg->height = image_frame.get_height();
 				img_msg->is_bigendian = false;
 				img_msg->step = width * bpp;
-				img_msg->header.frame.frame_id = "camera_d435i";
+				img_msg->header.frame_id = "camera_d435i";
 				img_msg->header.stamp = t;
 				image_raw_publisher_.publish(img_msg);
 			}
@@ -425,17 +427,17 @@ class CameraNode: public rclcpp::Node
 
 		void TimerCallback()
 		{
-			auto frames = pipe_.wait_for_frame();
+			auto frames = pipe_.wait_for_frames();
 			auto time_stamp = rclcpp::Clock().now();
 
 			if (is_color_ && publish_pointcloud_)
 			{
-				rs2::align align(RS2_STEAM_COLOR);
-				aligned_frameset_ = frames.apply_filter(align)
+				rs2::align align(RS2_STREAM_COLOR);
+				aligned_frameset_ = frames.apply_filter(align);
 			}
 			else
 			{
-				aligned_framset_ = frames;
+				aligned_frameset_ = frames;
 			}
 
 
@@ -473,7 +475,7 @@ class CameraNode: public rclcpp::Node
 		// Realsense vairables
 		rs2::device dev_;
 		rs2_intrinsics depth_intrinsics_;
-		rs2_intrinsics stream_intrisics_;
+		rs2_intrinsics stream_intrinsics_;
 		rs2_extrinsics depth2color_extrinsics_;
 		std::unique_ptr<rs2::context> ctx_;
 		rs2::frameset aligned_frameset_;
