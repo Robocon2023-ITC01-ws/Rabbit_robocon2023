@@ -1,14 +1,14 @@
 #include <librealsense2/rs.hpp>
 #include <mutex>
-#include "example.hpp"
 #include <cstring>
 #include <rclcpp/rclcpp.hpp>
+#include <rclcpp/logger.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/image_encodings.hpp>
 #include "tf2/LinearMath/Quaternion.h"
-#include "geometry/msg/vector.h"
+#include "geometry_msgs/msg/vector3.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include <cv_bridge/cv_bridge.h>
 #include <rclcpp/logger.hpp>
@@ -23,6 +23,10 @@
 #define DEPTH_FPS 6 
 
 
+struct vector3
+{
+	uint16_t x, y, z;
+};
 
 class RealsenseNode: public rclcpp::Node
 {
@@ -30,6 +34,10 @@ class RealsenseNode: public rclcpp::Node
 		RealsenseNode()
 		: Node("realsense_node")
 		{
+
+			SetUpDevice();
+
+
 			image_publisher_ = this->create_publisher<sensor_msgs::msg::Image>("camera/input/rgb", 10);
 			image_timer_ = this->create_wall_timer(
 					1/30ms, std::bind(&RealsenseNode::image_callback, this));
@@ -45,8 +53,86 @@ class RealsenseNode: public rclcpp::Node
 		}
 	private:
 
+
+		void SetUpDevice()
+		{
+			config_.enable_stream(RS2_STREAM_COLOR, 640, 480, RS2_FORMAT_RGB8, fps_);
+			config_.enable_stream(RS2_STREAM_ACCEL, RS2_FORMAT_MOTION_XYZ32F);
+			config_.enable_stream(RS2_STREAM_GYRO, RS2_FORMAT_MOTION_XYZ32F);
+			auto profile = pipe_.start(config_, [&](rs2::frame frame)
+			{	
+				// Cast the frame
+				auto motion = frame.as<rs2::motion_frame>();
+				// If casting is succeed 
+				if (motion && motion.get_profile().stream_type() == RS2_STREAM_GYRO && motion.get_profile().format() == RS2_FORMAT_MOTION_XYZ32F)
+				{
+					// get timestamp of current frame
+					double ts = motion.get_timestamp();
+					rs2_vector gyro_data = motion.get_motion_data();
+					process_gyro(gyro_data, ts);
+				}
+
+				if (motion && motion.get_profile().stream_type() == RS2_STREAM_ACCEL && motion.get_profile() == RS2_STREAM_ACCEL && motion.get_profile().format() == RS2_FORMAT_MOTION_XYZ32F)
+				{
+					rs2_vectr accel_data = motion.get_motion_data();
+
+					process_accel(accel_data);
+				}
+			});
+
+			// Start Data pipeline
+			pipe_.start(config_);
+			RCLCPP_INFO(logger_, "Pipeline has started!");
+		}
+
+
+		void gyro_callback()
+		{
+
+			geometry_msgs::msg::Vector3::SharedPtr gyro_data;
+			gyro_data->x = theta_gyro_.x;
+			gyro_data->y = theta_gyro_.y;
+			gyro_data->z = theta_gyro_.z;
+
+			gyro_publisher_->publish(gyro_data);
+
+		}
+
+
+		void accel_callback()
+		{
+			geometry_msgs::msg::Vector3::SharedPtr accel_data;
+			accel_data->x = theta_accel_.x;
+			accel_data->y = theta_accel_.y;
+			accel_data->z = theta_accel_.z;
+
+			accel_publisher_->publish(accel_data);
+
+		}
+
+
+			
 		void image_callback()
 		{
+			if (rs2::video_frame image_frame = aligned_frameset_.first_or_default(RS2_STREAM_COLOR))
+			{
+				cv::Mat image_raw;
+				image_raw = cv::Mat(cv::Size(image_frame.get_width(), image_frame.get_height()), CV_8UC3, const_cast<void *>(image_frame.get_data()), cv::Mat::AUTO_STEP);
+
+				sensor_msgs::msg::Image::SharedPtr img_msg;
+				img_msg = cv_bridge::CvImage(
+						std_msgs::msg::Header(),
+						sensor_msgs::image_encodings::RGB8, image_raw).toImageMsg();
+				// Byte per pixel
+				auto bpp = image_frame.get_bytes_per_pixel();
+				auto width = image_frame.get_width();
+				img_msg->width = width;
+				img_msg->height = image_frame.get_height();
+				img_msg->is_bigendian = false;
+				img_msg->step = width * bpp;
+				img_msg->header.frame_id = "camera_d345i";
+				img_msg->header.stamp = rclcpp::Time::now();
+				image_publisher_->(img_msg);
 
 		}
 		
@@ -74,7 +160,7 @@ class RealsenseNode: public rclcpp::Node
 
                         // Apply the calculated change of angle to the current angle (theta)
                         std::lock_guard<std::mutex> lock(theta_mtx_);
-                        theta_.add(-gyro_angle.z, -gyro_angle.y, gyro_angle.x);
+                        theta_gyro_.add(-gyro_angle.z, -gyro_angle.y, gyro_angle.x);
                 }
 
 
@@ -92,15 +178,15 @@ class RealsenseNode: public rclcpp::Node
                         if (firstAccel_)
                         {
                                 firstAccel_ = false;
-                                theta_ = accel_angle;
+                                theta_accel_ = accel_angle;
 
-                                theta_.y = PI_FL;
+                                theta_accel_.y = PI_FL;
                         }
                         else
                         {
                                 // Apply complementary filter
-                                theta_.x = theta_.x * alpha + accel_angle.x * (1-alpha);
-                                theta_.z = theta_.z * alpha + accel_angle.z * (1-alpha);
+                                theta_accel_.x = theta_accel_.x * alpha_ + accel_angle.x * (1-alpha_);
+                                theta_accel_.z = theta_accel_.z * alpha_ + accel_angle.z * (1-alpha_);
                         }
                 }
 
@@ -109,7 +195,8 @@ class RealsenseNode: public rclcpp::Node
 
 
 		// Angle of camera
-        	float3 theta_;
+        	float3 theta_gyro_;
+		float3 theta_accel_;
         	std::mutex theta_mtx_;
 
         	float alpha_ = 0.98f;
@@ -121,23 +208,31 @@ class RealsenseNode: public rclcpp::Node
 
 		bool found_gyro_ = false;
 		bool found_accel_ = false;
+
+
+		// RGB frame
+		int fps_ = 30;
 			
 		// Realsense Context
-		rs2::context ctx_;
+		std::unique_ptr<rs2::context> ctx_;
 		// Pipeline
 		rs2::pipeline pipe_;
 		// Config
 		rs2::config config_;
-		camera_renderer camera;
+
+		// Frameset
+		rs2::frameset aligned_frameset_;
 
 			
 		// Create publisher
+		rclcpp::Logger logger_;
 		rclcpp::Publisher<sensor_msgs::msg::Image::SharedPtr image_publisher_;
 		rclcpp::Publisher<sensor_msgs::msg::CompressedImage::SharedPtr image_compressed_publisher_;
 		rclcpp::Publisher<geometry_msgs::msg::Vector3::SharedPtr gyro_publisher_;
 		rclcpp::Publisher<geometry_msgs::msg::Vector3::SharedPtr accel_publisher_;
 		rclcpp::TimerBase::SharedPtr timer_;
-	
+
+
 }
 
 

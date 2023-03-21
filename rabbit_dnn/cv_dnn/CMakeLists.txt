@@ -84,6 +84,13 @@ add_executable(rs_d435_node_v3
 
 ament_target_dependencies(rs_d435_node_v3 ${DEPENDENCIES})
 
+
+add_executable(imu_d435_node
+	include/${PROJECT_NAME}/example.hpp
+	src/imu_d435i.cpp)
+
+
+
 target_link_libraries(rs_d435_node
   ${Boost_SYSTEM_LIBRARY}  # pcl_conversions requires this
   ${OpenCV_LIBRARIES}
@@ -107,6 +114,16 @@ target_link_libraries(rs_d435_node_v3
   ${SDL2_LIBRARIES}
 
 )
+
+
+target_link_libraries(imu_d435_node
+  ${Boost_SYSTEM_LIBRARY}  # pcl_conversions requires this
+  ${OpenCV_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${SDL2_LIBRARIES}
+
+)
+
 
 target_include_directories(rs_d435_node_v3 PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
