@@ -7,21 +7,39 @@ from .library.casadi_solver_rabbit import CasadiNMPC
 from .library.rabbit_robot import RabbitModel
 from .library.bezier_path import calc_4points_bezier_path, calc_bezier_path
 
-from rclpy.action import ActionServer
+from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.node import Node
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from mpc_action.action import MPCAction
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, Float64
 from geometry_msgs.msg import Twist, Pose, Vector3
 
 class MPCActionServer(Node):
 
     def __init__(self):
         super().__init__('mpc_server_node')
+
+
+        ## ROS SETUP
+        mpc_timer = 0.1
+        control_timer = 0.01
+        cmd_timer = 0.01
+        self.odom_subscriber = self.create_subscription(Vector3, 'odometry', self.odom_callback, 100)
+        self.control_subscirber = self.create_subscription(Float32MultiArray, 'control_feedback', self.controls_callback, 100)
+        self.control_publisher = self.create_publisher(Float32MultiArray, 'input_control', 100)
+        self.cmd_control_publisher = self.create_publisher(Twist, 'cmd_vel', 100)
+        self.cmd_timer = self.create_timer(cmd_timer, self.cmd_control_callback)
+        # ROS ACTION
+        self.goal_handle = None
         self.mpc_server = ActionServer(
                 self,
                 MPCAction,
                 'mpc_action',
-                self.mpc_callback)
+                execute_callback=self.mpc_callback,
+                callback_group=ReentrantCallbackGroup(),
+                handle_accepted_callback=self.handle_accepted_callback,
+                cancel_callback=self.cancel_callback)
         self.initX = [0.0, 0.0, 0.0]
         self.initU = [0.0, 0.0, 0.0, 0.0]
 
@@ -37,7 +55,7 @@ class MPCActionServer(Node):
         self.mpc_type = "circle"
         self.index = 0
         self.N = 100
-        self.dt = 0.1
+        self.dt = 0.01
         self.t0 = 0
         self.mpciter = 0
         self.sim_time = 23
@@ -78,22 +96,8 @@ class MPCActionServer(Node):
                             mat_Q=self.mat_Q, mat_R=self.mat_R,
                             N=self.N, dt=self.dt, sim_time=self.sim_time)
         
-        ## Path Planner Goal
-        #self.goal_x = 0.0
-        #self.goal_y = 0.0
-        #self.goal_yaw = 0.0
         self.n_points = 100
         self.offset = 2.0
-        #self.start_X = [self.feedback_states[0], self.feedback_states[1], self.feedback_states[2]]
-        #self.end_X = [self.goal_x, self.goal_y, self.goal_yaw]
-
-        #self.path, _ = self.calc_planner(self.start_X, self.end_X, self.n_points, self.offset)
-
-        #self.path_x = self.path[:, 0]
-        #self.path_y = self.path[:, 1]
-        #self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
-
-        #self.goal_states = np.vstack([self.path_x, self.path_y, self.path_yaw]).T
 
         ## Solver
         self.f, self.solver, self.args = self.casadi_solver.casadi_model_setup()
@@ -102,17 +106,29 @@ class MPCActionServer(Node):
         ## Euclidean norm condition
         self.norm_cond = 0.0
 
-        ## ROS SETUP
-        mpc_timer = 0.1
-        control_timer = 0.01
-        cmd_timer = 0.01
-        self.odom_subscriber = self.create_subscription(Vector3, 'odometry', self.odom_callback, 100)
-        self.control_subscirber = self.create_subscription(Float32MultiArray, 'control_feedback', self.controls_callback, 100)
-        self.control_publisher = self.create_publisher(Float32MultiArray, 'input_control', 100)
-        self.cmd_control_publisher = self.create_publisher(Twist, 'cmd_vel', 100)
-        # self.cmd_timer = self.create_timer(cmd_timer, self.cmd_control_callback)
-        #self.solver_time = self.create_timer(mpc_timer, self.nmpc_solver)
+    def destroy(self):
+        self.mpc_server.destroy()
+        super().destroy_node()
 
+    def goal_callback(self, goal_request):
+        self.get_logger().info('Received goal request')
+        return GoalResponse.ACCEPT
+
+
+    def handle_accepted_callback(self, goal_handle):
+        self.get_logger().info('Deferring execution')
+        self.goal_handle = goal_handle
+        self.timer = self.create_timer(2.0, self.timer_callback)
+
+
+    def timer_callback(self):
+        if self.goal_handle is not None:
+            self.goal_handle.execute()
+        self.timer.cancel()
+    
+    def cancel_callback(self, goal_handle):
+        self.get_logger().info('Received cancel request')
+        return CancelResponse.ACCEPT
 
     def odom_callback(self, odom_msg):
         self.current_x = odom_msg.x
@@ -172,7 +188,8 @@ class MPCActionServer(Node):
         x_f = np.concatenate((x_f[:, 1:], x_f[:, -1:]), axis=1)
         return t, st, x_f, u
 
-    def mpc_callback(self, goal_handle):
+
+    async def mpc_callback(self, goal_handle):
         self.get_logger().info('Executing task...')
 
         goal_feedback = MPCAction.Feedback()
@@ -181,8 +198,6 @@ class MPCActionServer(Node):
         goal = np.array(goal_handle.request.goal_states)
         # print(goal)
         goal_states = self.path_beizer(goal)
-
-
 
         while (np.linalg.norm(goal_states[goal_states.shape[0]-1] - self.current_states, 2) > 0.01):
             if np.linalg.norm(goal_states[goal_states.shape[0]-1] - self.current_states, 2) > 0.3:
@@ -214,12 +229,12 @@ class MPCActionServer(Node):
             sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
             # print(sol_x.full()[:, self.index])
             ########################### Shift Timestep ###########################
-            # self.t0 = self.t0 + self.dt
-            # f_value = self.f(self.feedback_states, self.feedback_controls)
-            # self.feedback_states = self.feedback_states + self.dt * f_value
-            # self.states = np.tile(self.feedback_states.full().reshape(-1, 1), self.N+1).T
-            # self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
-            self.t0, self.feedback_states, self.states, self.controls = self.shift_timestep(self.dt, self.t0, self.feedback_states, sol_x, sol_u, self.f)
+            self.t0 = self.t0 + self.dt
+            f_value = self.f(self.feedback_states, self.feedback_controls)
+            self.current_states = self.feedback_states + self.dt * f_value
+            self.states = np.tile(self.feedback_states.reshape(-1, 1), self.N+1).T
+            self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
+            # self.t0, self.feedback_states, self.states, self.controls = self.shift_timestep(self.dt, self.t0, self.feedback_states, sol_x, sol_u, self.f)
             ################################################## Apply Next Prediction ##################################################
             for k in range(self.N):
                 index = self.mpciter + k
@@ -230,22 +245,22 @@ class MPCActionServer(Node):
                 self.next_controls = np.tile(np.array([10, 10, 10, 10]).reshape(1, -1), self.N).T
             ###########################################################################################################################
             v1_m1, v2_m2, v3_m3, v4_m4 = sol_u.full()[0, self.index], sol_u.full()[1, self.index], sol_u.full()[2, self.index], sol_u.full()[3, self.index]
-            self.current_x = sol_x.full()[0, self.index]
-            self.current_y = sol_x.full()[1, self.index]
-            self.current_yaw = sol_x.full()[2, self.index]
-            self.feedback_states = np.array([
-                                        self.current_x,
-                                        self.current_y,
-                                        self.current_yaw])
-            self.current_w1 = v1_m1
-            self.current_w2 = v2_m2
-            self.current_w3 = v3_m3
-            self.current_w4 = v4_m4
-            self.feedback_controls = np.array([
-                                            self.current_w1,
-                                            self.current_w2,
-                                            self.current_w3,
-                                            self.current_w4])
+            #self.current_x = sol_x.full()[0, self.index]
+            #self.current_y = sol_x.full()[1, self.index]
+            #self.current_yaw = sol_x.full()[2, self.index]
+            #self.feedback_states = np.array([
+            #                            self.current_x,
+            #                            self.current_y,
+            #                            self.current_yaw])
+            #self.current_w1 = v1_m1
+            #self.current_w2 = v2_m2
+            #self.current_w3 = v3_m3
+            #self.current_w4 = v4_m4
+            #self.feedback_controls = np.array([
+            #                                self.current_w1,
+            #                                self.current_w2,
+            #                                self.current_w3,
+            #                                self.current_w4])
             goal_feedback.goal_feedback = [self.current_x, self.current_y, self.current_yaw]
             goal_handle.publish_feedback(goal_feedback)
             self.current_vx, self.current_vy, self.current_vth = self.rabbit_model.forward_kinematic(
@@ -255,12 +270,11 @@ class MPCActionServer(Node):
                                                                                                     v4_m4,
                                                                                                     sol_x.full()[2, self.index],
                                                                                                     "numpy")
-            print(self.feedback_states)
-            # print(self.feedback_controls)
+            print(v1_m1, v2_m2, v3_m3, v4_m4)
+            # print(self.test_num)
+            # print(self.mpciter)
             self.mpciter += 1
-            time.sleep(0.1)
-
-
+            time.sleep(0.01)
 
         if (np.linalg.norm(goal_states[goal_states.shape[0]-1] - self.current_states, 2) == 0.01):
             goal_handle.succeed()
@@ -270,7 +284,13 @@ class MPCActionServer(Node):
 
 
         return result
-
+    
+    def cmd_control_callback(self):
+        twist = Twist()
+        twist.linear.x = self.current_vx
+        twist.linear.y = self.current_vy
+        twist.angular.z = self.current_vth
+        self.cmd_control_publisher.publish(twist)
 
         
 
@@ -280,7 +300,13 @@ def main(args=None):
 
     mpc_server = MPCActionServer()
 
-    rclpy.spin(mpc_server)
+    executor = MultiThreadedExecutor()
+
+    rclpy.spin(mpc_server, executor=executor)
+
+    mpc_server.destroy()
+
+    rclpy.shutdown()
 
 
 if __name__=='__main__':

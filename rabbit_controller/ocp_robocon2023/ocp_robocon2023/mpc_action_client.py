@@ -16,27 +16,52 @@ class MPCActionClient(Node):
                 'mpc_action')
 
 
-    def send_goal(self, goal_states):
-        goal_msg = MPCAction.Goal()
-
-        goal_msg.goal_states = goal_states
-
+    def send_goal(self, goal):
+        self.get_logger().info('Waiting for mpc server')
         self.mpc_client.wait_for_server()
 
-        self._send_goal_future = self.mpc_client.send_goal_async(goal_msg, feedback_callback=self.feedback_callback)
+        goal_msg = MPCAction.Goal()
+        goal_msg.goal_states = goal
 
-        self._send_goal_future.add_done_callback(self.goal_response_callback)
-    
+
+        self.send_goal_future = self.mpc_client.send_goal_async(
+                goal_msg,
+                feedback_callback=self.feedback_callback)
+
+
+        self.send_goal_future.add_done_callback(self.goal_response_callback)
+
+
+   
+    def cancel_done(self, future):
+        cancel_response = future.result()
+        if len(cancel_response.goals_canceling) > 0:
+            self.get_logger().info('Goal successfully canceled')
+        else:
+            self.get_logger().info('Goal failed to cancel')
+
+        rclpy.shutdown()
+
     def goal_response_callback(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().info('Goal rejected')
             return
 
-        self.get_logger().info('Goal accepted:')
-        
-        self._get_result_future = goal_handle.get_result_async()
-        self._get_result_future.add_done_callback(self.get_result_callback)
+        self.goal_handle = goal_handle
+
+        self.get_logger().info('Goal accepted')
+
+        #self.timer = self.create_timer(1, self.timer_callback)
+
+    def timer_callback(self):
+        self.get_logger().info('Canceling goal')
+
+        # Cancel the goal
+        future = self.goal_handle.cancel_goal_async()
+        future.add_done_callback(self.cancel_done)
+
+        self.timer.cancel()
 
     def get_result_callback(self, future):
         result = future.result().result
