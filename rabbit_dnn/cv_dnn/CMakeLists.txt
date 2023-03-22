@@ -77,6 +77,19 @@ add_executable(rs_d435_node
 
 ament_target_dependencies(rs_d435_node ${DEPENDENCIES})
 
+add_executable(rs_d435_node_v3
+  include/${PROJECT_NAME}/constants.hpp
+  src/camera_node_v3.cpp)
+
+
+ament_target_dependencies(rs_d435_node_v3 ${DEPENDENCIES})
+
+
+add_executable(imu_d435_node
+	src/imu_d435i.cpp)
+ament_target_dependencies(imu_d435_node ${DEPENDENCIES})  
+
+
 target_link_libraries(rs_d435_node
   ${Boost_SYSTEM_LIBRARY}  # pcl_conversions requires this
   ${OpenCV_LIBRARIES}
@@ -85,6 +98,7 @@ target_link_libraries(rs_d435_node
 
 )
 
+
 target_include_directories(rs_d435_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -92,7 +106,34 @@ target_include_directories(rs_d435_node PUBLIC
 install(TARGETS rs_d435_node
   DESTINATION lib/${PROJECT_NAME})
 
+target_link_libraries(rs_d435_node_v3
+  ${Boost_SYSTEM_LIBRARY}  # pcl_conversions requires this
+  ${OpenCV_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${SDL2_LIBRARIES}
 
+)
+
+
+target_link_libraries(imu_d435_node
+  ${Boost_SYSTEM_LIBRARY}  # pcl_conversions requires this
+  ${OpenCV_LIBRARIES}
+  ${PCL_LIBRARIES}
+  ${SDL2_LIBRARIES}
+
+)
+
+
+target_include_directories(rs_d435_node_v3 PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+
+install(TARGETS rs_d435_node_v3
+  DESTINATION lib/${PROJECT_NAME})
+
+  install(TARGETS
+  imu_d435_node
+  DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
