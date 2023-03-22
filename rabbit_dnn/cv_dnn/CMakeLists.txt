@@ -86,9 +86,8 @@ ament_target_dependencies(rs_d435_node_v3 ${DEPENDENCIES})
 
 
 add_executable(imu_d435_node
-	include/${PROJECT_NAME}/example.hpp
 	src/imu_d435i.cpp)
-
+ament_target_dependencies(imu_d435_node ${DEPENDENCIES})  
 
 
 target_link_libraries(rs_d435_node
@@ -132,7 +131,9 @@ target_include_directories(rs_d435_node_v3 PUBLIC
 install(TARGETS rs_d435_node_v3
   DESTINATION lib/${PROJECT_NAME})
 
-
+  install(TARGETS
+  imu_d435_node
+  DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
