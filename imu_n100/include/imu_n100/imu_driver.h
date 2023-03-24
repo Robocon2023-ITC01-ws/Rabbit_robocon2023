@@ -31,6 +31,7 @@ namespace FDILink
 #define TYPE_INSGPS 0x42
 #define TYPE_GROUND 0xf0
 #define IMU_LEN  0x38   //56
+// #define IMU_LEN  0x24   //56
 #define AHRS_LEN 0x30   //48
 #define INSGPS_LEN 0x54 //84
 #define PI 3.141592653589793
@@ -73,6 +74,12 @@ class ahrsBringup : public rclcpp::Node
 
     // Topic
     string imu_topic_, mag_pose_2d_topic_;
+    float w1;
+    float x1;
+    float y1;
+    float z1;
+    float data_store[4];
+    int i = 0;
 
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub;
     rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr mag_pose_pub;
