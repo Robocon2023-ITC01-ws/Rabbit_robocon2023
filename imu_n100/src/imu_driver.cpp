@@ -13,7 +13,7 @@ namespace FDILink
         this->get_parameter_or("mag_pose_2d_topic", mag_pose_2d_topic_, std::string("/mag_pose_2d"));
 
         // Serial
-        this->get_parameter_or("port", serial_port_, std::string("/dev/ttyUSB1"));
+        this->get_parameter_or("port", serial_port_, std::string("/dev/ttyUSB0"));
         this->get_parameter_or("baud", serial_baud_, 921600);
 
         // Publisher
@@ -327,11 +327,13 @@ namespace FDILink
                 // publish imu topic
                 auto imu_data = sensor_msgs::msg::Imu();
                 // imu_data.header.stamp = rclcpp::Time::now();
+                //imu_data.header.stamp = rclcpp::Time::now();
                 imu_data.header.frame_id = imu_frame_id_.c_str();
                 Eigen::Quaterniond q_ahrs(ahrs_frame_.frame.data.data_pack.Qw,
                                           ahrs_frame_.frame.data.data_pack.Qx,
                                           ahrs_frame_.frame.data.data_pack.Qy,
                                           ahrs_frame_.frame.data.data_pack.Qz);
+
                 Eigen::Quaterniond q_r =
                     Eigen::AngleAxisd(3.14159, Eigen::Vector3d::UnitZ()) *
                     Eigen::AngleAxisd(3.14159, Eigen::Vector3d::UnitY()) *
@@ -340,43 +342,68 @@ namespace FDILink
                     Eigen::AngleAxisd(0.00000, Eigen::Vector3d::UnitZ()) *
                     Eigen::AngleAxisd(0.00000, Eigen::Vector3d::UnitY()) *
                     Eigen::AngleAxisd(0.00000, Eigen::Vector3d::UnitX());
-                // Eigen::AngleAxisd( 3.14159, Eigen::Vector3d::UnitX());
                 Eigen::Quaterniond q_xiao_rr =
                     Eigen::AngleAxisd(3.14159 / 2, Eigen::Vector3d::UnitZ()) *
                     Eigen::AngleAxisd(0.00000, Eigen::Vector3d::UnitY()) *
                     Eigen::AngleAxisd(3.14159, Eigen::Vector3d::UnitX());
-                // Eigen::Quaterniond q_r =
-                //     Eigen::AngleAxisd( 0.00000, Eigen::Vector3d::UnitZ()) *
-                //     Eigen::AngleAxisd( 0.00000, Eigen::Vector3d::UnitY()) *
-                //     Eigen::AngleAxisd( 3.14159, Eigen::Vector3d::UnitX());
-                // Eigen::Quaterniond q_rr =
-                //     Eigen::AngleAxisd( 0.00000, Eigen::Vector3d::UnitZ()) *
-                //     Eigen::AngleAxisd( 0.00000, Eigen::Vector3d::UnitY()) *
-                //     Eigen::AngleAxisd( 3.14159, Eigen::Vector3d::UnitX());
-                //     //Eigen::AngleAxisd( 3.14159, Eigen::Vector3d::UnitX());
-                // Eigen::Quaterniond q_xiao_rr =
-                //     Eigen::AngleAxisd( 0.00000, Eigen::Vector3d::UnitZ()) *
-                //     Eigen::AngleAxisd( 0.00000, Eigen::Vector3d::UnitY()) *
-                //     Eigen::AngleAxisd( 3.14159, Eigen::Vector3d::UnitX());
+                    
                 if (device_type_ == 0)
                 {
+                    data_store[0] = ahrs_frame_.frame.data.data_pack.Qx;
+                    data_store[1] = ahrs_frame_.frame.data.data_pack.Qy;
+                    data_store[2] = ahrs_frame_.frame.data.data_pack.Qz;
+                    data_store[3] = ahrs_frame_.frame.data.data_pack.Qw;
+                    yaw = -atan2(2*(data_store[3]*data_store[2] + data_store[1]*data_store[0]), 1 - 2*(data_store[1]*data_store[1] + data_store[2]*data_store[2]));
+                    
                     while (i <= 6)
                     {
-                        data_store[0] = ahrs_frame_.frame.data.data_pack.Qw;
-                        data_store[1] = ahrs_frame_.frame.data.data_pack.Qx;
-                        data_store[2] = ahrs_frame_.frame.data.data_pack.Qy;
-                        data_store[3] = ahrs_frame_.frame.data.data_pack.Qz;
+                        store_yaw = yaw;
                         i += 1;
                         break;
                     }
-                    imu_data.orientation.w = ahrs_frame_.frame.data.data_pack.Qw - data_store[0];
-                    imu_data.orientation.x = ahrs_frame_.frame.data.data_pack.Qx - data_store[1];
-                    imu_data.orientation.y = ahrs_frame_.frame.data.data_pack.Qy - data_store[2];
-                    imu_data.orientation.z = ahrs_frame_.frame.data.data_pack.Qz - data_store[3];
-                    // imu_data.orientation.w = w1 ;
-                    // imu_data.orientation.x = x1 ;
-                    // imu_data.orientation.y = y1 ;
-                    // imu_data.orientation.z = z1 ;
+                    if (store_yaw >0)
+                    {
+                        if(yaw>=store_yaw && yaw <=3.14)
+                        {
+                            yaw = yaw - store_yaw;
+                        }
+                        else if(yaw <store_yaw && yaw>-3.139)
+                        {
+                            yaw =6.28-store_yaw + yaw;
+                        }
+                        if (yaw>3.14 && yaw <6.28)
+                        {
+                            yaw = yaw - 6.28;
+                        }
+                    }
+                    else if(store_yaw <0)
+                    {
+                        if(yaw<=3.14 && yaw >=store_yaw)
+                        {
+                            yaw = yaw - store_yaw;
+                        }
+                        else if(yaw >-3.139 && yaw<store_yaw)
+                        {
+                            yaw = 6.28-store_yaw + yaw;
+                        }
+                        if (yaw>3.14 && yaw <6.28)
+                        {
+                            yaw = yaw - 6.28;
+                        }
+                    }
+                    
+                    yaw = int(yaw*1000 + .5);
+                    yaw = (float)(yaw/1000);
+                    std::cout << "yaw: "  << (float) yaw<< std::endl;
+                    //std::cout << "yaw: "  << (float)(store_yaw)<< std::endl;
+                    // imu_data.orientation.w = ahrs_frame_.frame.data.data_pack.Qw;
+                    // imu_data.orientation.x = ahrs_frame_.frame.data.data_pack.Qx;
+                    // imu_data.orientation.y = ahrs_frame_.frame.data.data_pack.Qy;
+                    // imu_data.orientation.z = ahrs_frame_.frame.data.data_pack.Qz;
+                    imu_data.orientation.w = cos(roll/2) * cos(pitch/2) * cos(yaw/2) + sin(roll/2) * sin(pitch/2) * sin(yaw/2);
+                    imu_data.orientation.x = sin(roll/2) * cos(pitch/2) * cos(yaw/2) - cos(roll/2) * sin(pitch/2) * sin(yaw/2);
+                    imu_data.orientation.y = cos(roll/2) * sin(pitch/2) * cos(yaw/2) + sin(roll/2) * cos(pitch/2) * sin(yaw/2);
+                    imu_data.orientation.z = cos(roll/2) * cos(pitch/2) * sin(yaw/2) - sin(roll/2) * sin(pitch/2) * cos(yaw/2);
                     imu_data.angular_velocity.x = ahrs_frame_.frame.data.data_pack.RollSpeed;
                     imu_data.angular_velocity.y = ahrs_frame_.frame.data.data_pack.PitchSpeed;
                     imu_data.angular_velocity.z = ahrs_frame_.frame.data.data_pack.HeadingSpeed;
@@ -386,7 +413,6 @@ namespace FDILink
                 }
                 else if (device_type_ == 1)
                 {
-
                     Eigen::Quaterniond q_out = q_r * q_ahrs * q_rr;
                     // Eigen::Quaterniond q_out = q_ahrs;
                     imu_data.orientation.w = q_out.w();
@@ -438,8 +464,6 @@ namespace FDILink
     {
         double temp1 = magy * cos(roll) + magz * sin(roll);
         double temp2 = magx * cos(pitch) + magy * sin(pitch) * sin(roll) - magz * sin(pitch) * cos(roll);
-        // double temp1 = cos(roll) + magzsin(roll);
-        // double temp2 = cos(pitch) + sin(pitch) * sin(roll) - magz * sin(pitch) * cos(roll);
         magyaw = atan2(-temp1, temp2);
         if (magyaw < 0)
         {

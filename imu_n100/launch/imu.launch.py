@@ -19,7 +19,7 @@ def generate_launch_description():
     )
 
     port_arg = DeclareLaunchArgument(
-        "port", default_value= TextSubstitution(text = "/dev/ttyUSB1")
+        "port", default_value= TextSubstitution(text = "/dev/ttyUSB0")
     )
 
     baud_arg = DeclareLaunchArgument(

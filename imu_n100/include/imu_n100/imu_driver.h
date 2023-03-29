@@ -80,6 +80,10 @@ class ahrsBringup : public rclcpp::Node
     float z1;
     float data_store[4];
     int i = 0;
+    float yaw;
+    float store_yaw;
+    float roll = 0.0;
+    float pitch = 0.0;
 
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub;
     rclcpp::Publisher<geometry_msgs::msg::Pose2D>::SharedPtr mag_pose_pub;
