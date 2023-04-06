@@ -133,6 +133,17 @@ class NMPCRabbit(Node):
                                         self.current_w4
                                     ])
 
+    # Shift timestep at each iteration
+    def shift_timestep(self, step_horizon, t0, x0, x_f, u, f):
+        x0 = x0.reshape((-1,1))
+        t = t0 + step_horizon
+        f_value = f(x0, u[:, 0])
+        st = ca.DM.full(x0 + (step_horizon) * f_value)
+        # st = np.array([0, 0, 0])
+        u = np.concatenate((u[:, 1:], u[:, -1:]), axis=1)
+        x_f = np.concatenate((x_f[:, 1:], x_f[:, -1:]), axis=1)
+        return t, st, x_f, u
+    
     def path_callback(self, path_msg):
         self.goal_x = path_msg.data[0]
         self.goal_y = path_msg.data[1]
@@ -185,6 +196,7 @@ class NMPCRabbit(Node):
         self.current_states = self.feedback_states + self.dt * f_value
         self.states = np.tile(self.feedback_states.reshape(-1, 1), self.N+1).T
         self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
+        #self.t0, self.feedback_states, self.states, self.controls = self.shift_timestep(self.dt, self.t0, self.feedback_states, sol_x, sol_u, self.f)
         ################################################## Apply Next Prediction ##################################################
         for k in range(self.N):
             index = self.mpciter + k
