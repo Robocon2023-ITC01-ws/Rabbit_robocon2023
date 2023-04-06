@@ -33,7 +33,6 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
-
 add_library(crc_table src/crc_table.cpp)
 
 
@@ -41,9 +40,13 @@ add_executable(imu src/imu_driver.cpp)
 target_link_libraries(imu crc_table)
 ament_target_dependencies(imu rclcpp std_msgs geometry_msgs sensor_msgs serial)
 
+add_executable(imu_pub src/imu_pub.cpp)
+ament_target_dependencies(imu_pub rclcpp std_msgs geometry_msgs sensor_msgs serial)
+
 
 install(TARGETS
   imu
+  imu_pub
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}

@@ -36,7 +36,7 @@ def generate_launch_description():
     )
 
     device_type_args = DeclareLaunchArgument(
-        "device_type", default_value= TextSubstitution(text = "1")
+        "device_type", default_value= TextSubstitution(text = "0")
     )
     mag_pose_args = DeclareLaunchArgument(
         "mag_pose_2d_topic", default_value= TextSubstitution(text="/mag_pose_2d")
@@ -46,6 +46,7 @@ def generate_launch_description():
         package= 'imu_n100',
         name = 'imu_node',
         executable= 'imu',
+        output = 'screen',
         parameters= [{
         "debug": LaunchConfiguration('debug'),
         "port": LaunchConfiguration('port'),
