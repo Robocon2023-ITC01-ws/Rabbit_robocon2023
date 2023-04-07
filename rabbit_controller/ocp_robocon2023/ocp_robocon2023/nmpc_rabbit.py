@@ -61,7 +61,6 @@ class NMPCRabbit(Node):
                                         self.current_w3,
                                         self.current_w4
                                     ])
-        self.init_states = self.feedback_states.copy()
         self.states = np.tile(self.feedback_states.reshape(-1, 1), self.N+1).T
         self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
         self.next_trajectories = self.states.copy()
@@ -103,9 +102,9 @@ class NMPCRabbit(Node):
         self.odom_subscriber = self.create_subscription(Vector3, 'odometry', self.odom_callback, 100)
         self.control_subscriber = self.create_subscription(Float32MultiArray, 'input_control1', self.controls_callback, 100)
         self.control_publisher = self.create_publisher(Float32MultiArray, 'input_control', 100)
-        # self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
-        self.cmd_control_publisher = self.create_publisher(Twist, 'cmd_vel', 100)
-        self.cmd_timer = self.create_timer(cmd_timer, self.cmd_control_callback)
+        self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
+#         self.cmd_control_publisher = self.create_publisher(Twist, 'cmd_vel', 100)
+#         self.cmd_timer = self.create_timer(cmd_timer, self.cmd_control_callback)
         self.solver_time = self.create_timer(mpc_timer, self.nmpc_solver)
         self.path_gen = self.create_subscription(Float32MultiArray, 'path_gen', self.path_callback, 100)
 
@@ -194,9 +193,9 @@ class NMPCRabbit(Node):
         self.t0 = self.t0 + self.dt
         f_value = self.f(self.feedback_states, self.feedback_controls)
         self.current_states = self.feedback_states + self.dt * f_value
-        self.states = np.tile(self.feedback_states.reshape(-1, 1), self.N+1).T
+        self.states = np.tile(self.current_sates.full().reshape(-1, 1), self.N+1).T
         self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
-        #self.t0, self.feedback_states, self.states, self.controls = self.shift_timestep(self.dt, self.t0, self.feedback_states, sol_x, sol_u, self.f)
+        
         ################################################## Apply Next Prediction ##################################################
         for k in range(self.N):
             index = self.mpciter + k
@@ -206,33 +205,27 @@ class NMPCRabbit(Node):
             self.next_trajectories[k+1] = self.goal_states[index, :]
             self.next_controls = np.tile(np.array([10, 10, 10, 10]).reshape(1, -1), self.N).T
         ############################################################################################################################
-        # self.next_trajectories, self.next_controls = self.casadi_solver.reference_state_and_control(self.t0, self.dt, self.feedback_states.full(), self.N, type=type)
-        v1_m1, v2_m2, v3_m3, v4_m4 = sol_u.full()[0, self.index], sol_u.full()[1, self.index], sol_u.full()[2, self.index], sol_u.full()[3, self.index]
-
-        self.current_vx, self.current_vy, self.current_vth = self.rabbit_model.forward_kinematic(
-            v1_m1,
-            v2_m2,
-            v3_m3,
-            v4_m4,
-            sol_x.full()[2, self.index],
-            "numpy"
-        )
+        
+        self.current_w1 = sol_u.full()[0, self.index]
+        self.current_w2 = sol_u.full()[1, self.index]
+        self.current_w3 = sol_u.full()[2, self.index]
+        self.current_w4 = sol_u.full()[3, self.index]
+        
         self.mpciter += 1
-        print(v1_m1, v2_m2, v3_m3, v4_m4)
-        # print(sol_x.full()[0, self.index], sol_x.full()[1, self.index], sol_x.full()[2, self.index])
+        
 
-    # def control_timer_pub(self):
-    #     con_msg = Float32MultiArray()
-    #     con_msg.data = [self.current_w1, self.current_w2, self.current_w3, self.current_w4]
-    #     self.control_publisher.publish(con_msg)
+    def control_timer_pub(self):
+        con_msg = Float32MultiArray()
+        con_msg.data = [self.current_w1, self.current_w2, self.current_w3, self.current_w4]
+        self.control_publisher.publish(con_msg)
 
-    def cmd_control_callback(self):
-        twist = Twist()
-        twist.linear.x = self.current_vx
-        twist.linear.y = self.current_vy
-        twist.angular.z = self.current_vth
+#     def cmd_control_callback(self):
+#         twist = Twist()
+#         twist.linear.x = self.current_vx
+#         twist.linear.y = self.current_vy
+#         twist.angular.z = self.current_vth
 
-        self.cmd_control_publisher.publish(twist)
+#         self.cmd_control_publisher.publish(twist)
 
 
     def calc_planner(self, start_X, end_X, n_points, offset):
