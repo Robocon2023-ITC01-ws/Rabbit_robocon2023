@@ -26,10 +26,9 @@ class MPCActionServer(Node):
         control_timer = 0.01
         cmd_timer = 0.01
         self.odom_subscriber = self.create_subscription(Vector3, 'odometry', self.odom_callback, 100)
-        self.control_subscirber = self.create_subscription(Float32MultiArray, 'control_feedback', self.controls_callback, 100)
-        self.control_publisher = self.create_publisher(Float32MultiArray, 'input_control', 100)
-        self.cmd_control_publisher = self.create_publisher(Twist, 'cmd_vel', 100)
-        self.cmd_timer = self.create_timer(cmd_timer, self.cmd_control_callback)
+        self.control_subscirber = self.create_subscription(Float32MultiArray, 'feedback_controls', self.controls_callback, 100)
+        self.control_publisher = self.create_publisher(Float32MultiArray, 'input_controls', 100)
+        self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
         # ROS ACTION
         self.goal_handle = None
         self.mpc_server = ActionServer(
@@ -177,17 +176,6 @@ class MPCActionServer(Node):
 
         return np.vstack([path_x, path_y, path_yaw]).T
     
-    # Shift timestep at each iteration
-    def shift_timestep(self, step_horizon, t0, x0, x_f, u, f):
-        x0 = x0.reshape((-1,1))
-        t = t0 + step_horizon
-        f_value = f(x0, u[:, 0])
-        st = ca.DM.full(x0 + (step_horizon) * f_value)
-        # st = np.array([0, 0, 0])
-        u = np.concatenate((u[:, 1:], u[:, -1:]), axis=1)
-        x_f = np.concatenate((x_f[:, 1:], x_f[:, -1:]), axis=1)
-        return t, st, x_f, u
-
 
     async def mpc_callback(self, goal_handle):
         self.get_logger().info('Executing task...')
@@ -227,11 +215,14 @@ class MPCActionServer(Node):
 
             sol_x = ca.reshape(sol['x'][:3*(self.N+1)], 3, self.N+1)
             sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
-            # print(sol_x.full()[:, self.index])
+            self.opt_u1 = sol_u.full()[0, self.index]
+            self.opt_u2 = sol_u.full()[1, self.index]
+            self.opt_u3 = sol_u.full()[2, self.index]
+            self.opt_u4 = sol_u.full()[3, self.index]
             ########################### Shift Timestep ###########################
-            self.t0 = self.t0 + self.dt
-            f_value = self.f(self.feedback_states, self.feedback_controls)
-            self.current_states = self.feedback_states + self.dt * f_value
+            # self.t0 = self.t0 + self.dt
+            # f_value = self.f(self.feedback_states, self.feedback_controls)
+            # self.current_states = self.feedback_states + self.dt * f_value
             self.states = np.tile(self.feedback_states.reshape(-1, 1), self.N+1).T
             self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
             # self.t0, self.feedback_states, self.states, self.controls = self.shift_timestep(self.dt, self.t0, self.feedback_states, sol_x, sol_u, self.f)
@@ -240,23 +231,23 @@ class MPCActionServer(Node):
                 index = self.mpciter + k
                 if index >= goal_states.shape[0]:
                     index = goal_states.shape[0]-1
-                self.next_trajectories[0] = self.current_states.T
+                self.next_trajectories[0] = self.feedback_states.T
                 self.next_trajectories[k+1] = goal_states[index, :]
                 self.next_controls = np.tile(np.array([10, 10, 10, 10]).reshape(1, -1), self.N).T
             ###########################################################################################################################
-            v1_m1, v2_m2, v3_m3, v4_m4 = sol_u.full()[0, self.index], sol_u.full()[1, self.index], sol_u.full()[2, self.index], sol_u.full()[3, self.index]
-            #self.current_x = sol_x.full()[0, self.index]
-            #self.current_y = sol_x.full()[1, self.index]
-            #self.current_yaw = sol_x.full()[2, self.index]
-            #self.feedback_states = np.array([
+            # v1_m1, v2_m2, v3_m3, v4_m4 = sol_u.full()[0, self.index], sol_u.full()[1, self.index], sol_u.full()[2, self.index], sol_u.full()[3, self.index]
+            # self.current_x = sol_x.full()[0, self.index]
+            # self.current_y = sol_x.full()[1, self.index]
+            # self.current_yaw = sol_x.full()[2, self.index]
+            # self.feedback_states = np.array([
             #                            self.current_x,
             #                            self.current_y,
             #                            self.current_yaw])
-            #self.current_w1 = v1_m1
-            #self.current_w2 = v2_m2
-            #self.current_w3 = v3_m3
-            #self.current_w4 = v4_m4
-            #self.feedback_controls = np.array([
+            # self.current_w1 = v1_m1
+            # self.current_w2 = v2_m2
+            # self.current_w3 = v3_m3
+            # self.current_w4 = v4_m4
+            # self.feedback_controls = np.array([
             #                                self.current_w1,
             #                                self.current_w2,
             #                                self.current_w3,
@@ -270,7 +261,6 @@ class MPCActionServer(Node):
                                                                                                     v4_m4,
                                                                                                     sol_x.full()[2, self.index],
                                                                                                     "numpy")
-            print(v1_m1, v2_m2, v3_m3, v4_m4)
             # print(self.test_num)
             # print(self.mpciter)
             self.mpciter += 1
@@ -285,12 +275,12 @@ class MPCActionServer(Node):
 
         return result
     
-    def cmd_control_callback(self):
-        twist = Twist()
-        twist.linear.x = self.current_vx
-        twist.linear.y = self.current_vy
-        twist.angular.z = self.current_vth
-        self.cmd_control_publisher.publish(twist)
+    def control_timer_pub(self):
+        con_msg = Float32MultiArray()
+        con_msg.data = [self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4]
+        self.control_publisher.publish(con_msg)
+
+        self.get_logger().info("Publishing optimal control '%s'" % con_msg)
 
         
 

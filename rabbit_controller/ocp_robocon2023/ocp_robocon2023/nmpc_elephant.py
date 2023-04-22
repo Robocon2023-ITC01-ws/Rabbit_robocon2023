@@ -25,11 +25,11 @@ class NMPCRabbit(Node):
         self.highU = [10, 10, 10, 10]
 
         self.mat_Q = [75, 75, 90]
-        self.mat_R = [0.01, 0.01, 0.01, 0.01]
+        self.mat_R = [0.1, 0.1, 0.1, 0.1]
 
         self.mpc_type = "circle"
         self.index = 0
-        self.N = 50
+        self.N = 100
         self.dt = 0.1
         self.t0 = 0
         self.mpciter = 0
@@ -41,9 +41,9 @@ class NMPCRabbit(Node):
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_yaw = 0.0
-        # self.current_vx = 0.0
-        # self.current_vy = 0.0
-        # self.current_vth = 0.0
+        self.current_vx = 0.0
+        self.current_vy = 0.0
+        self.current_vth = 0.0
         self.feedback_states = np.array([
                                         self.current_x,
                                         self.current_y,
@@ -96,35 +96,30 @@ class NMPCRabbit(Node):
         ## Euclidean norm condition
         self.norm_cond = 0.0
 
-        # Optimal Control
-        self.opt_u1 = 0.0
-        self.opt_u2 = 0.0
-        self.opt_u3 = 0.0
-        self.opt_u4 = 0.0
-
         ## ROS Setup
         mpc_timer = 0.1
         control_timer = 0.01
-        self.odom_subscriber = self.create_subscription(Vector3, 'odometry', self.odom_callback, 10)
-        self.control_subscriber = self.create_subscription(Float32MultiArray, 'feedback_controls', self.controls_callback, 10)
-        self.control_publisher = self.create_publisher(Float32MultiArray, 'input_controls', 10)
-        self.path_gen = self.create_subscription(Float32MultiArray, 'path_gen', self.path_callback, 10)
-        self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
+        cmd_timer = 0.01
+        self.odom_subscriber = self.create_subscription(Vector3, 'odometry', self.odom_callback, 100)
+        self.control_subscriber = self.create_subscription(Float32MultiArray, 'input_control1', self.controls_callback, 100)
+        self.control_publisher = self.create_publisher(Float32MultiArray, 'input_control', 100)
+        # self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
+        self.cmd_control_publisher = self.create_publisher(Twist, 'cmd_vel', 100)
+        self.cmd_timer = self.create_timer(cmd_timer, self.cmd_control_callback)
         self.solver_time = self.create_timer(mpc_timer, self.nmpc_solver)
+        self.path_gen = self.create_subscription(Float32MultiArray, 'path_gen', self.path_callback, 100)
 
 
     def odom_callback(self, odom_msg):
         self.current_x = odom_msg.x
         self.current_y = odom_msg.y
-        self.current_yaw = odom_msg.z
+        self.current_yaw = odom_msg.yaw
 
         self.feedback_states = np.array([
                                         self.current_x,
                                         self.current_y,
                                         self.current_yaw
                                     ])
-        
-        # self.get_logger().info("Current states '%s'" % odom_msg)
 
     def controls_callback(self, con_msg):
         self.current_w1 = con_msg.data[0]
@@ -138,8 +133,18 @@ class NMPCRabbit(Node):
                                         self.current_w4
                                     ])
 
+    # Shift timestep at each iteration
+    def shift_timestep(self, step_horizon, t0, x0, x_f, u, f):
+        x0 = x0.reshape((-1,1))
+        t = t0 + step_horizon
+        f_value = f(x0, u[:, 0])
+        st = ca.DM.full(x0 + (step_horizon) * f_value)
+        # st = np.array([0, 0, 0])
+        u = np.concatenate((u[:, 1:], u[:, -1:]), axis=1)
+        x_f = np.concatenate((x_f[:, 1:], x_f[:, -1:]), axis=1)
+        return t, st, x_f, u
+    
     def path_callback(self, path_msg):
-
         self.goal_x = path_msg.data[0]
         self.goal_y = path_msg.data[1]
         self.goal_yaw = path_msg.data[2]
@@ -154,10 +159,6 @@ class NMPCRabbit(Node):
         self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
 
         self.goal_states = np.vstack([self.path_x, self.path_y, self.path_yaw]).T
-
-        # print(self.goal_states)
-
-        # self.get_logger().info("Path is being calculated '%s'" % path_msg)
 
 
     def nmpc_solver(self):
@@ -189,39 +190,49 @@ class NMPCRabbit(Node):
         )
         sol_x = ca.reshape(sol['x'][:3*(self.N+1)], 3, self.N+1)
         sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
-
-
-        # print(sol_x.full()[:, self.index])
-        print(sol_u.full()[:, self.index])
-        ################################################## Obtained Optimal Control ##################################################
-        self.opt_u1 = sol_u.full()[0, self.index]
-        self.opt_u2 = sol_u.full()[1, self.index]
-        self.opt_u3 = sol_u.full()[2, self.index]
-        self.opt_u4 = sol_u.full()[3, self.index]
-        ##############################################################################################################################
-        ################################################## Shift Timestep ##################################################
+        ########################### Shift Timestep ###########################
         self.t0 = self.t0 + self.dt
-        # f_value = self.f(self.feedback_states, self.feedback_controls)
-        # self.current_states = self.feedback_states + self.dt * f_value
+        f_value = self.f(self.feedback_states, self.feedback_controls)
+        self.current_states = self.feedback_states + self.dt * f_value
         self.states = np.tile(self.feedback_states.reshape(-1, 1), self.N+1).T
         self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
+        #self.t0, self.feedback_states, self.states, self.controls = self.shift_timestep(self.dt, self.t0, self.feedback_states, sol_x, sol_u, self.f)
         ################################################## Apply Next Prediction ##################################################
         for k in range(self.N):
             index = self.mpciter + k
             if index >= self.goal_states.shape[0]:
                 index = self.goal_states.shape[0]-1
-            self.next_trajectories[0] = self.feedback_states.T
+            self.next_trajectories[0] = self.current_states.T
             self.next_trajectories[k+1] = self.goal_states[index, :]
             self.next_controls = np.tile(np.array([10, 10, 10, 10]).reshape(1, -1), self.N).T
         ############################################################################################################################
+        # self.next_trajectories, self.next_controls = self.casadi_solver.reference_state_and_control(self.t0, self.dt, self.feedback_states.full(), self.N, type=type)
+        v1_m1, v2_m2, v3_m3, v4_m4 = sol_u.full()[0, self.index], sol_u.full()[1, self.index], sol_u.full()[2, self.index], sol_u.full()[3, self.index]
+
+        self.current_vx, self.current_vy, self.current_vth = self.rabbit_model.forward_kinematic(
+            v1_m1,
+            v2_m2,
+            v3_m3,
+            v4_m4,
+            sol_x.full()[2, self.index],
+            "numpy"
+        )
         self.mpciter += 1
+        print(v1_m1, v2_m2, v3_m3, v4_m4)
+        # print(sol_x.full()[0, self.index], sol_x.full()[1, self.index], sol_x.full()[2, self.index])
 
-    def control_timer_pub(self):
-        con_msg = Float32MultiArray()
-        con_msg.data = [self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4]
-        self.control_publisher.publish(con_msg)
+    # def control_timer_pub(self):
+    #     con_msg = Float32MultiArray()
+    #     con_msg.data = [self.current_w1, self.current_w2, self.current_w3, self.current_w4]
+    #     self.control_publisher.publish(con_msg)
 
-        # self.get_logger().info("Publishing optimal control '%s'" % con_msg)
+    def cmd_control_callback(self):
+        twist = Twist()
+        twist.linear.x = self.current_vx
+        twist.linear.y = self.current_vy
+        twist.angular.z = self.current_vth
+
+        self.cmd_control_publisher.publish(twist)
 
 
     def calc_planner(self, start_X, end_X, n_points, offset):
