@@ -27,9 +27,11 @@ class ros_node(Node):
         self.position = np.zeros(3)
         self.control_n = np.zeros(4)
         self.dt = 0.01
+        self.i = 0
+        self.store_data= 0.0
 
 		# initialization
-        self.Nmhe = 10
+        self.Nmhe = 10 #10
         self.nx = 3
         self.nu = 4
         self.sampling_time = 0.1
@@ -59,16 +61,19 @@ class ros_node(Node):
 		# === Add Noise ===
         self.x_noise = np.random.normal(0.001,0.001)
         self.y_noise = np.random.normal(0.001,0.001)
-        self.theta_noise = np.random.normal(np.radians(5), np.radians(5))
+        self.theta_noise = np.random.normal(np.radians(2), np.radians(0.02))
         self.noise = np.array([self.x_noise, self.y_noise, self.theta_noise]).reshape(1,-1)
 
         # ROS2 Publisher and Subscriber
         self.imu_subscriber = self.create_subscription(Imu, "/imu/data2", self.imu_callback, 100)
-        self.odom_publisher = self.create_publisher(Vector3, "/odom/data", 10)
+        self.odom_publisher = self.create_publisher(Vector3, "odometry", 10)
         self.odom_timer = self.create_timer(self.timer, self.odom_callback)
+        self.odom_pub_timer = self.create_timer(1/30, self.odom_pub_callback)
         self.can_subscriber = self.create_subscription(Twist, 'vel_data', self.can_data, 100)
         self.control_command = self.create_subscription(Float32MultiArray, 'input_control1', self.control_callback, 100)
         self.timer_integral = self.create_timer(self.timer, self.integral)
+        self.control_pub = self.create_publisher(Float32MultiArray, "feedback_controls", 10)
+        self.control_pub_timer = self.create_timer(self.timer, self.control_pub_callback)
 
     def can_data(self, msg):
         self.command_vel[0] = msg.linear.x
@@ -81,8 +86,8 @@ class ros_node(Node):
         self.q[2] = imu_msg.orientation.z
         self.q[3] = imu_msg.orientation.w
         self.roll, self.pitch, self.yaw = self.rabbit.euler_from_quaternion(self.q[0], self.q[1], self.q[2], self.q[3])
-        self.yaw = -self.yaw
-    
+        
+        
     def integral(self):
         dx = (self.command_vel[0]*np.cos(self.yaw) + self.command_vel[1]*np.sin(self.yaw))*self.dt 
         dy = (-self.command_vel[0]*np.sin(self.yaw) + self.command_vel[1]*np.cos(self.yaw))*self.dt
@@ -94,7 +99,7 @@ class ros_node(Node):
         control_msg.data = self.control_n
 
     def odom_callback(self):
-        odom_msg = Vector3()
+        
         self.current_control = self.control_n
 		# while (self.mheiter * self.sampling_time < self.sim_time):
         for k in range(self.Nmhe+1):
@@ -134,12 +139,21 @@ class ros_node(Node):
             self.sol_Umhe = ca.reshape(self.sol_mhe['x'][self.nx*(self.Nmhe+1):], self.nu, self.Nmhe)
             self.X_mhe = np.concatenate([self.sol_Xmhe[:, 1:], self.sol_Xmhe[:,-1:]],axis=1).T
             self.U_mhe = np.concatenate([self.sol_Umhe[:, 1:], self.sol_Umhe[:,-1:]],axis=1).T
-        print(np.round(self.sol_Xmhe.full()[:,self.Nmhe],3))
+        print(np.array( [np.round(self.sol_Umhe[0],3), np.round(self.sol_Umhe[1],3), np.round(self.sol_Umhe[2],3), np.round(self.sol_Umhe[3],3)]))
+
+
+    def odom_pub_callback(self):
+        odom_msg = Vector3()
         odom_msg.x = float(np.round(self.sol_Xmhe[0],3))
         odom_msg.y = float(np.round(self.sol_Xmhe[1],3))
         odom_msg.z = float(np.round(self.sol_Xmhe[2],3))
         self.odom_publisher.publish(odom_msg)
         self.current_state = self.sol_Xmhe.full()[:,self.Nmhe]
+
+    def control_pub_callback(self):
+        control_msg = Float32MultiArray()
+        control_msg.data = [np.round(self.sol_Umhe[0],3), np.round(self.sol_Umhe[1],3), np.round(self.sol_Umhe[2],3), np.round(self.sol_Umhe[3],3)]
+        self.control_pub.publish(control_msg)
 
 
 def main(args=None):

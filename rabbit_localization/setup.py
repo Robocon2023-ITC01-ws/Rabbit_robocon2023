@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'localization = rabbit_localization.mhe_pubsub:main'
+            'localization = rabbit_localization.mhe_pubsub:main',
+            'yaw = rabbit_localization.testing_yaw:main',
         ],
     },
 )

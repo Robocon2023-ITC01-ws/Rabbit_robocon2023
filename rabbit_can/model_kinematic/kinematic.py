@@ -4,15 +4,15 @@ import numpy as np
 class kinematic():
     def __init__(self):
         self.wheel_radius = 0.05 # [m]
-        self.Lxl = 0.21 # [m]
-        self.Ly = 0.20 # [m]
+        self.Lxl = 0.17 # [m]
+        self.Ly = 0.13 # [m]
 
 
     def mecanum_inverse_kinematic(self, vx, vy, vth):
         J_inv = (1/self.wheel_radius)*np.array([
-		[1, 1, (self.Lxl + self.Ly)],
-		[-1, 1, (self.Lxl + self.Ly)],
-		[-1, -1, (self.Lxl + self.Ly)],
+		[1, 1, -(self.Lxl + self.Ly)],
+		[-1,1, (self.Lxl + self.Ly)],
+		[-1, -1, -(self.Lxl + self.Ly)],
 		[1,-1,  (self.Lxl + self.Ly)]])  
         inv_vec = J_inv @ np.array([vx, vy, vth])
 	
@@ -22,7 +22,7 @@ class kinematic():
         J = (self.wheel_radius/4)*np.array([
             [1, -1, -1, 1],
             [1, 1, -1, -1],
-            [w1/(self.Lxl + self.Ly), w2/(self.Lxl + self.Ly), w3/(self.Lxl + self.Ly),w4/(self.Lxl + self.Ly)]
+            [-w1/(self.Lxl + self.Ly), w2/(self.Lxl + self.Ly), -w3/(self.Lxl + self.Ly),w4/(self.Lxl + self.Ly)]
         ])
         vec = J @ np.array([w1, w2, w3, w4])
         return vec[0], vec[1], vec[2]
