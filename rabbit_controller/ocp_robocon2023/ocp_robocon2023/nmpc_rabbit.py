@@ -161,6 +161,7 @@ class NMPCRabbit(Node):
 
 
     def nmpc_solver(self):
+        start_time = self.get_clock().now()
         if np.linalg.norm(self.goal_states[self.goal_states.shape[0]-1, :]-self.feedback_states, 2) > 0.3:
             self.norm_cond += 0.06
             if self.norm_cond % 3 == 0:
@@ -192,7 +193,7 @@ class NMPCRabbit(Node):
 
 
         # print(sol_x.full()[:, self.index])
-        print(sol_u.full()[:, self.index])
+        # print(sol_u.full()[:, self.index])
         ################################################## Obtained Optimal Control ##################################################
         self.opt_u1 = sol_u.full()[0, self.index]
         self.opt_u2 = sol_u.full()[1, self.index]
@@ -201,9 +202,9 @@ class NMPCRabbit(Node):
         ##############################################################################################################################
         ################################################## Shift Timestep ##################################################
         self.t0 = self.t0 + self.dt
-        # f_value = self.f(self.feedback_states, self.feedback_controls)
-        # self.current_states = self.feedback_states + self.dt * f_value
-        self.states = np.tile(self.feedback_states.reshape(-1, 1), self.N+1).T
+        f_value = self.f(self.feedback_states, self.feedback_controls)
+        self.current_states = self.feedback_states + self.dt * f_value
+        self.states = np.tile(self.current_states.full().reshape(-1, 1), self.N+1).T
         self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
         ################################################## Apply Next Prediction ##################################################
         for k in range(self.N):
@@ -214,7 +215,13 @@ class NMPCRabbit(Node):
             self.next_trajectories[k+1] = self.goal_states[index, :]
             self.next_controls = np.tile(np.array([10, 10, 10, 10]).reshape(1, -1), self.N).T
         ############################################################################################################################
+        end_time = self.get_clock().now()
+
+        duration = (end_time - start_time )
+
+        print(duration)
         self.mpciter += 1
+        
 
     def control_timer_pub(self):
         con_msg = Float32MultiArray()
