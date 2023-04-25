@@ -4,7 +4,7 @@ import casadi as ca
 import time
 
 from .library.casadi_solver_rabbit import CasadiNMPC
-from .library.rabbit_robot import RabbitModel
+from .rabbit_robot import RabbitModel
 from .library.bezier_path import calc_4points_bezier_path, calc_bezier_path
 
 from rclpy.action import ActionServer, CancelResponse, GoalResponse

@@ -6,7 +6,7 @@ from std_msgs.msg import String, Float32MultiArray
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Vector3
 from ocp_robocon2023.tf_transformations import euler_from_quaternion, quaternion_from_euler
-from ocp_robocon2023.elephant_robot import ElephantModel
+from ocp_robocon2023.rabbit_robot import RabbitModel
 
 
 class TestPublisher(Node):
@@ -24,7 +24,7 @@ class TestPublisher(Node):
 
 		self.timer_ = self.create_timer(0.1, self.odom_callback)
 		self.publish_control = self.create_publisher(Float32MultiArray, 'feedback_controls', 10)
-		self.elephant_model = ElephantModel()
+		self.rabbit_model = RabbitModel()
 
 		self.current_x = 0.0
 		self.current_y = 0.0
@@ -40,11 +40,14 @@ class TestPublisher(Node):
 		self.v2 = msg.data[1]
 		self.v3 = msg.data[2]
 		self.v4 = msg.data[3]
-		vx, vy, vth = self.elephant_model.forward_kinematic(self.v1, self.v2, self.v3, self.v4, 0.0, "numpy")
+		vx, vy, vth = self.rabbit_model.forward_kinematic(self.v1, self.v2, self.v3, self.v4, 0.0, "numpy")
 
-		self.current_x += vx * 0.1
-		self.current_y += vy * 0.1
-		self.current_th += vth * 0.1
+		self.current_x = self.current_x + vx * 0.1
+		self.current_y += self.current_y + vy * 0.1
+		self.current_th += self.current_th + vth * 0.1
+
+		# print(self.current_x ,self.current_y, self.current_th)
+		print(vx, vy, vth)
 
 	def control_pub(self):
 		input_msg = Float32MultiArray()

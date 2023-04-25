@@ -37,122 +37,7 @@ class CasadiNMPC:
             ca.horzcat(         0,           0, 1)
         )
 
-    # Shift timestep at each iteration
-    def shift_timestep(self, step_horizon, t0, x0, x_f, u, f):
-        x0 = x0.reshape((-1,1))
-        t = t0 + step_horizon
-        f_value = f(x0, u[:, 0])
-        st = ca.DM.full(x0 + (step_horizon) * f_value)
-        # st = np.array([0, 0, 0])
-        u = np.concatenate((u[:, 1:], u[:, -1:]), axis=1)
-        x_f = np.concatenate((x_f[:, 1:], x_f[:, -1:]), axis=1)
-        return t, st, x_f, u
-
-    # Function to calculate reference trajectory
-    def reference_state_and_control(self, t, step_horizon, x0, N, type="None"):
-        # initial state
-        x = x0.reshape(1, -1).tolist()[0]
-        u = []
-        # Speed drop
-        Tf = 3 # delay seconds
-        speed_exp_up = lambda t: Tf*(10-10*np.exp(-2*t))
-        speed_exp_down = lambda t: Tf*(10-10*np.exp(-2*(t-30)))
-        # set points for calculating reference control
-        x_ref, y_ref, theta_ref = [], [], []
-        v1_ref, v2_ref, v3_ref, v4_ref = [], [], [], []
-        x_ref_, y_ref_, theta_ref_ = 0, 0, 0
-        vx_r, vy_r, vth_r = 0, 0, 0
-        # state for N predictions
-        for k in range(N):
-            t_predict = t + step_horizon * k
-            if type == "circle":
-                angle = 4*math.pi/10*t_predict
-                x_ref_ = 1.5*math.cos(angle)
-                y_ref_ = 1.5*math.sin(angle)
-                theta_ref_ = 0.0
-
-            if type == "8shaped":
-                x_ref_ = 1.5 + 1.5* np.sin(2*np.pi*t_predict/25)
-                y_ref_ = 1.5*np.sin(4*np.pi*t_predict/25)
-                theta_ref_ = 0.0
-            if type=="traj1":
-                if t_predict <= 6:
-                    x_ref_ = 0.5*t_predict
-                    y_ref_ = 0.0
-                    theta_ref_ = 0.0
-                if (t_predict > 6) and (t_predict <= 8):
-                    x_ref_ = 3.0
-                    y_ref_ = 0.0
-                    theta_ref_ = 0.785*(t_predict-6)
-                if (t_predict > 6):
-                    x_ref_ = 3.0
-                    y_ref_ = 0.0
-                    theta_ref_ = 1.57
-                # if (t_predict > 8) and (t_predict <= 14):
-                #     x_ref_ = 3.0+0.5*(t_predict-8)
-                #     y_ref_ = 0.0
-                #     theta_ref_ = 3.14
-                # if (t_predict > 14) and (t_predict <= 16):
-                #     x_ref_ = 0.0
-                #     y_ref_ = 0.0
-                #     theta_ref_ = 3.14-1.57*(t_predict-14)
-                # if (t_predict > 16):
-                #     x_ref_ = 6.0
-                #     y_ref_ = 0.0
-                #     theta_ref_ = 0.0
-            if type=="traj2":
-                if t_predict <= 6:
-                    x_ref_ = 0.5*t_predict
-                    y_ref_ = 0.0
-                    theta_ref_ = 0.0
-                if (t_predict > 6) and (t_predict <= 12):
-                    x_ref_ = 3.0
-                    y_ref_ = 0.5*(t_predict-6)
-                    theta_ref_ = 0.0
-                if (t_predict > 12) and (t_predict <= 18):
-                    x_ref_ = 3.0-0.5*(t_predict-12)
-                    y_ref_ = 3.0
-                    theta_ref_ = 0.0
-                if (t_predict > 18) and (t_predict <= 24):
-                    x_ref_ = 0.0
-                    y_ref_ = 3-0.5*(t_predict-18)
-                    theta_ref_ = 0.0
-            if type=="traj3":
-                x_ref_ = 0.0
-                y_ref_ = 0.0
-                theta_ref_ = np.pi/4*t_predict
-            if type=="traj4":
-                if t_predict <= 6:
-                    x_ref_ = 0.5*t_predict
-                    y_ref_ = 0.0
-                    theta_ref_ = 0.0
-                if (t_predict > 6) and (t_predict <= 12):
-                    x_ref_ = 3.0-0.5*(t_predict-6)
-                    y_ref_ = 0.0
-                    theta_ref_ = 0.0
-                if (t_predict > 12):
-                    x_ref_ = 6.0
-                    y_ref_ = 0.0
-                    theta_ref_ = 0.0
-            x.append(x_ref_)
-            x.append(y_ref_)
-            x.append(theta_ref_)
-            x_ref.append(x_ref_)
-            y_ref.append(y_ref_)
-            theta_ref.append(theta_ref_)
-            vx, vy, vth = self.rabbit_model.velocity_from_discrete_points(k, 0.1, x_ref, y_ref, theta_ref)
-            v_ref1, v_ref2, v_ref3, v_ref4 = self.rabbit_model.inverse_kinematic(vx, vy, vth, "numpy")
-            u.append(v_ref1)
-            u.append(v_ref2)
-            u.append(v_ref3)
-            u.append(v_ref4)
-
-        # reshaped state and control
-        x = np.array(x).reshape(N+1, -1)
-        u = np.array(u).reshape(N, -1)
-
-        return x, u
-
+    
     def casadi_model_setup(self, type="track"):
         if type=="point":
             x = ca.SX.sym('x')
@@ -188,7 +73,7 @@ class CasadiNMPC:
             g = X[:, 0] - X_ref[:, 0]
             # Euler
             for k in range(self.N):
-                st = X[:, k] - P[:, k+1]
+                st = X[:, k] - P[:, k]
                 con = U[:, k]
                 cost_fn = cost_fn + st.T@Q@st + con.T@R@con
                 st_next = X[:, k+1]
@@ -287,9 +172,17 @@ class CasadiNMPC:
 
             cost_fn = cost_fn + (X[:, self.N]-X_ref[:, self.N]).T@Q@(X[:, self.N]-X_ref[:, self.N])
 
-            optimal_var = ca.vertcat(ca.reshape(X, -1, 1), ca.reshape(U, -1, 1))
-            optimal_par = ca.vertcat(ca.reshape(X_ref, -1, 1), ca.reshape(U_ref, -1, 1))
-            nlp_prob = {'f': cost_fn, 'x': optimal_var, 'p': optimal_par, 'g': g}
+            optimal_var = ca.vertcat(
+                ca.reshape(X, -1, 1),
+                ca.reshape(U, -1, 1))
+            optimal_par = ca.vertcat(
+                ca.reshape(X_ref, -1, 1),
+                ca.reshape(U_ref, -1, 1))
+            
+            nlp_prob = {'f': cost_fn,
+                        'x': optimal_var,
+                        'p': optimal_par,
+                        'g': g}
             opts = {
                     'ipopt.max_iter': 5000,
                     'ipopt.print_level': 0,
