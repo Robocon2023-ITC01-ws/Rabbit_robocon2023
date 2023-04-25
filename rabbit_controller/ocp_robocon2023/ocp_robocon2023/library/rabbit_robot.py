@@ -9,20 +9,20 @@ class RabbitModel():
 
         # Kinematic Configuration
         self.wheel_radius = 0.05 # [m]
-        self.Lx = 0.165           # [m]
-        self.Ly = 0.18          # [m]
+        self.Lx = 0.17           # [m]
+        self.Ly = 0.13          # [m]
     def forward_matrix(self, type=None):
         if type=="numpy":
             J_for = (self.wheel_radius/4)*np.array([
-                [1,  1, 1,  1],
-                [-1,   1, 1, -1],
-                [-1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly), -1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly)]
+                [1,  1, -1,  -1],
+                [1,  -1, -1, 1],
+                [-1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly), -1/(self.Lx+self.Ly)]
             ])
         elif type=="sym":
             J_for = (self.wheel_radius/4)*ca.DM([
-            [1,  1, 1,  1],
-            [-1,   1, 1, -1],
-            [-1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly), -1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly)]
+            [1,  1, -1,  -1],
+            [1,  -1, -1,  1],
+            [-1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly), -1/(self.Lx+self.Ly)]
         ])
         return J_for
 
