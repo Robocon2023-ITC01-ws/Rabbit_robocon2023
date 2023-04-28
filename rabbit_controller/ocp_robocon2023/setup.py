@@ -33,7 +33,8 @@ setup(
             "nmpc_rabbit = ocp_robocon2023.nmpc_rabbit:main",
             "nmpc_rabbit_v2 = ocp_robocon2023.nmpc_rabbit_v2:main",
             "mpc_action_server = ocp_robocon2023.mpc_action_server:main",
-            "mpc_action_client = ocp_robocon2023.mpc_action_client:main"
+            "mpc_action_client = ocp_robocon2023.mpc_action_client:main",
+            "nmpc_omni = ocp_robocon2023.nmpc_omni:main"
         ],
     },
 )

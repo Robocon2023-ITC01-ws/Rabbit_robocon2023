@@ -2,7 +2,7 @@ import numpy as np
 import casadi as ca
 import math
 
-from .rabbit_robot import RabbitModel
+from .rabbit_omni import RabbitModel
 
 class CasadiNMPC:
 
