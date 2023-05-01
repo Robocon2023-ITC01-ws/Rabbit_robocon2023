@@ -8,42 +8,40 @@ class RabbitModel():
     def __init__(self):
 
         # Kinematic Configuration
-        self.R = 0.22
-        self.r = 0.06
-        self.a1 = math.pi/4
-        self.a2 = 3*math.pi/4
-        self.a3 = 5*math.pi/4
-        self.a4 = 7*math.pi/4
-    def forward_matrix(self, theta, type=None):
+        self.wheel_radius = 0.05 # [m]
+        self.Lx = 0.17           # [m]
+        self.Ly = 0.13          # [m]
+    def forward_matrix(self, type=None):
         if type=="numpy":
-            J_for = (self.r/2)*np.array([
-                [ math.sin(theta+self.a1), -math.sin(theta+self.a2), math.sin(theta+self.a3), -math.sin(theta+self.a4)],
-                [ math.cos(theta+self.a1),  -math.cos(theta+self.a2),  math.cos(theta+self.a3),  -math.cos(theta+self.a4)],
-                [1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22)]
-            ], dtype=np.float32)
+            J_for = (self.wheel_radius/4)*np.array([
+                [1,  1, 1,  1],
+                [1,  -1, 1, -1],
+                [-1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly), -1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly)]
+            ])
         elif type=="sym":
-            J_for = (self.r/2)*ca.vertcat(
-                ca.horzcat(ca.sin(theta+self.a1),  -ca.sin(theta+self.a2), ca.sin(theta+self.a3), -ca.sin(theta+self.a4)),
-                ca.horzcat(ca.cos(theta+self.a1),  -ca.cos(theta+self.a2), ca.cos(theta+self.a3), -ca.cos(theta+self.a4)),
-                ca.horzcat(1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22))
-            )
+            J_for = (self.wheel_radius/4)*ca.DM([
+                [1, 1, 1,  1],
+                [1,  -1, 1, -1],
+                [-1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly), -1/(self.Lx+self.Ly), 1/(self.Lx+self.Ly)]
+        ])
         return J_for
 
-    def inverse_matrix(self, theta, type):
-        if type=="numpy":
-            J_inv = (1/self.r)*np.array([
-                [math.sin(theta+self.a1), math.cos(theta+self.a1), self.R],
-                [-math.sin(theta+self.a2), -math.cos(theta+self.a2), self.R],
-                [math.sin(theta+self.a3), math.cos(theta+self.a3), self.R],
-                [-math.sin(theta+self.a4), -math.cos(theta+self.a4), self.R]
-            ], dtype=np.float32)
-        elif type=="sym":
-            J_inv = (1/self.r)*ca.vertcat(
-                (ca.sin(theta+self.a1), ca.cos(theta+self.a1), self.R),
-                (-ca.sin(theta+self.a2), -ca.cos(theta+self.a2), self.R),
-                (ca.sin(theta+self.a3), ca.cos(theta+self.a3), self.R),
-                (-ca.sin(theta+self.a4), -ca.cos(theta+self.a4), self.R)
-            )
+    def inverse_matrix(self, type):
+        if type=="sym":
+            J_inv = (1/self.wheel_radius) * ca.DM([
+            [ 1,   1,  -(self.Lx+self.Ly)],
+            [-1,  1,  (self.Lx+self.Ly)],
+            [-1, -1, -(self.Lx+self.Ly)],
+            [1,  -1, (self.Lx+self.Ly)]
+        ])
+
+        elif type=="numpy":
+            J_inv = (1/self.wheel_radius) * np.array([
+            [ 1,   1,  -(self.Lx+self.Ly)],
+            [-1,  1,  (self.Lx+self.Ly)],
+            [-1, -1, -(self.Lx+self.Ly)],
+            [1,  -1, (self.Lx+self.Ly)]
+        ])
 
         return J_inv
 
@@ -59,23 +57,23 @@ class RabbitModel():
             [ math.cos(angle),  math.sin(angle),   0],
             [-math.sin(angle),  math.cos(angle),   0],
             [0             ,              0,       1]
-        ], dtype=np.float32)
+        ])
         return rot
 
     def forward_kinematic(self, v1, v2, v3, v4, angle, type=None):
 
         if type=="sym":
-            vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix(angle, type)@ca.vertcat(v1, v2, v3, v4)
+            vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix(type)@ca.vertcat(v1, v2, v3, v4)
         elif type=="numpy":
-            vec_for = self.rotation_matrix(angle, type.T)@self.forward_matrix(angle, type)@np.array([v1, v2, v3, v4])
+            vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix(type)@np.array([v1, v2, v3, v4])
 
         return vec_for
 
-    def inverse_kinematic(self, angle, vx, vy, vth, type):
+    def inverse_kinematic(self, vx, vy, vth, type):
         if type=="sym":
-            vec_inv = self.inverse_matrix(angle, type)@self.rotation_matrix(angle, type)@ca.vertcat(vx, vy, vth)
+            vec_inv = self.inverse_matrix(type)@ca.vertcat(vx, vy, vth)
         elif type=="numpy":
-            vec_inv = self.inverse_matrix(angle, type)@self.rotation_matrix(angle, type)@np.array([vx, vy, vth])
+            vec_inv = self.inverse_matrix(type)@np.array([vx, vy, vth])
         return vec_inv
 
     def velocity_from_discrete_points(self, k, dt, x_ref, y_ref, theta_ref):
@@ -125,22 +123,3 @@ class RabbitModel():
 
     def inverse_dynamic(self):
         pass
-
-if __name__ ==  "__main__":
-    rabbit = RabbitModel()
-
-    vx = 0
-    vy = 0
-    vth = 3.14
-
-    v1, v2, v3, v4 = rabbit.inverse_kinematic(0, vx, vy, vth, "numpy")
-
-    print(v1, v2, v3, v4)
-
-    # v1 = 10
-    # v2 = -10
-    # v3 = -10
-    # v4 = 10
-    # vx, vy, vth = rabbit.forward_kinematic(v1, v2, v3, v4, 0, "numpy")
-
-    # print(vx, vy, vth)

@@ -20,25 +20,25 @@ class NMPCRabbit(Node):
         self.initX = [0.0, 0.0, 0.0]
         self.initU = [0.0, 0.0, 0.0, 0.0]
 
-        self.lowX =  [-3, -3, -3.14]
-        self.highX = [ 3,  3,  3.14]
+        self.lowX =  [-6, -6, -3.14]
+        self.highX = [ 6,  6,  3.14]
 
         self.lowU = [-30, -30, -30, -30]
         self.highU = [30, 30, 30, 30]
 
-        self.mat_Q = [750, 750, 2000]
+        self.mat_Q = [750, 750, 900]
         self.mat_R = [1, 1, 1, 1]
 
         self.goal_flag = False
 
         self.mpc_type = "circle"
         self.index = 0
-        self.N = 50
+        self.N = 100
         self.dt = 0.1
         self.t0 = 0
         self.mpciter = 0
         self.sim_time = 23
-        self.speed_up = lambda t: 10*(1-np.exp(-2*t))
+        self.speed_up = lambda t: 20*(1-np.exp(-2*t))
 
         # Euler angle
 
@@ -189,6 +189,7 @@ class NMPCRabbit(Node):
                 self.norm_cond = 3.0
             self.args['lbx'][3*(self.N+1):] = -self.speed_up(self.norm_cond)
             self.args['ubx'][3*(self.N+1):] = self.speed_up(self.norm_cond)
+            print(self.norm_cond)
         else:
             self.args['lbx'][3*(self.N+1):] = self.lowU[0]
             self.args['ubx'][3*(self.N+1):] = self.highU[0]
@@ -246,11 +247,11 @@ class NMPCRabbit(Node):
             self.next_trajectories[1, 0] = self.current_states[1]
             self.next_trajectories[2, 0] = self.current_states[2]
             self.next_trajectories[:, k+1] = self.goal_states[:, index]
-            # self.next_trajectories[:, k+1] = np.array([self.goal_x, self.goal_y, self.goal_yaw])
-            # if ((np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) > 0.5) & (self.goal_flag)):
-            #     self.next_controls = np.tile(np.array([30, 30, 30, 30], dtype=np.float64).reshape(4, 1), self.N)
-            # elif ((np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) < 0.3)):
-            #     self.next_controls = np.tile(np.array([0, 0, 0, 0], dtype=np.float64).reshape(4, 1), self.N)
+            self.next_trajectories[:, k+1] = np.array([self.goal_x, self.goal_y, self.goal_yaw])
+            if ((np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) > 0.5) & (self.goal_flag)):
+                 self.next_controls = np.tile(np.array([20, 20, 20, 20], dtype=np.float64).reshape(4, 1), self.N)
+            elif ((np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) < 0.05)):
+                 self.next_controls = np.tile(np.array([0, 0, 0, 0], dtype=np.float64).reshape(4, 1), self.N)
 
         ############################################################################################################################
         end_time = self.get_clock().now()

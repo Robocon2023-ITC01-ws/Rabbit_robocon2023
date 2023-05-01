@@ -17,15 +17,15 @@ class RabbitModel():
     def forward_matrix(self, theta, type=None):
         if type=="numpy":
             J_for = (self.r/2)*np.array([
-                [ math.sin(theta+self.a1), -math.sin(theta+self.a2), math.sin(theta+self.a3), -math.sin(theta+self.a4)],
-                [ math.cos(theta+self.a1),  -math.cos(theta+self.a2),  math.cos(theta+self.a3),  -math.cos(theta+self.a4)],
-                [1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22)]
+                [math.sin(theta+self.a1), math.sin(theta+self.a2), -math.sin(theta+self.a3), -math.sin(theta+self.a4)],
+                [ math.cos(theta+self.a1),  math.cos(theta+self.a2),  -math.cos(theta+self.a3),  -math.cos(theta+self.a4)],
+                [1/(2*0.22), -1/(2*0.22), -1/(2*0.22), 1/(2*0.22)]
             ], dtype=np.float32)
         elif type=="sym":
             J_for = (self.r/2)*ca.vertcat(
-                ca.horzcat(ca.sin(theta+self.a1),  -ca.sin(theta+self.a2), ca.sin(theta+self.a3), -ca.sin(theta+self.a4)),
-                ca.horzcat(ca.cos(theta+self.a1),  -ca.cos(theta+self.a2), ca.cos(theta+self.a3), -ca.cos(theta+self.a4)),
-                ca.horzcat(1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22))
+                ca.horzcat(ca.sin(theta+self.a1),  ca.sin(theta+self.a2), -ca.sin(theta+self.a3), -ca.sin(theta+self.a4)),
+                ca.horzcat(ca.cos(theta+self.a1),  ca.cos(theta+self.a2), -ca.cos(theta+self.a3), -ca.cos(theta+self.a4)),
+                ca.horzcat(1/(2*0.22), -1/(2*0.22), -1/(2*0.22), 1/(2*0.22))
             )
         return J_for
 
@@ -33,15 +33,15 @@ class RabbitModel():
         if type=="numpy":
             J_inv = (1/self.r)*np.array([
                 [math.sin(theta+self.a1), math.cos(theta+self.a1), self.R],
-                [-math.sin(theta+self.a2), -math.cos(theta+self.a2), self.R],
-                [math.sin(theta+self.a3), math.cos(theta+self.a3), self.R],
+                [math.sin(theta+self.a2), math.cos(theta+self.a2), -self.R],
+                [-math.sin(theta+self.a3), -math.cos(theta+self.a3), -self.R],
                 [-math.sin(theta+self.a4), -math.cos(theta+self.a4), self.R]
             ], dtype=np.float32)
         elif type=="sym":
             J_inv = (1/self.r)*ca.vertcat(
                 (ca.sin(theta+self.a1), ca.cos(theta+self.a1), self.R),
-                (-ca.sin(theta+self.a2), -ca.cos(theta+self.a2), self.R),
-                (ca.sin(theta+self.a3), ca.cos(theta+self.a3), self.R),
+                (ca.sin(theta+self.a2), ca.cos(theta+self.a2), -self.R),
+                (-ca.sin(theta+self.a3), -ca.cos(theta+self.a3), -self.R),
                 (-ca.sin(theta+self.a4), -ca.cos(theta+self.a4), self.R)
             )
 
@@ -67,7 +67,7 @@ class RabbitModel():
         if type=="sym":
             vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix(angle, type)@ca.vertcat(v1, v2, v3, v4)
         elif type=="numpy":
-            vec_for = self.rotation_matrix(angle, type.T)@self.forward_matrix(angle, type)@np.array([v1, v2, v3, v4])
+            vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix(angle, type)@np.array([v1, v2, v3, v4])
 
         return vec_for
 
@@ -126,21 +126,29 @@ class RabbitModel():
     def inverse_dynamic(self):
         pass
 
-if __name__ ==  "__main__":
-    rabbit = RabbitModel()
+    def quaternion_from_euler(self, roll, pitch, yaw):
+        qx = np.sin(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) - np.cos(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
+        qy = np.cos(roll/2) * np.sin(pitch/2) * np.cos(yaw/2) + np.sin(roll/2) * np.cos(pitch/2) * np.sin(yaw/2)
+        qz = np.cos(roll/2) * np.cos(pitch/2) * np.sin(yaw/2) - np.sin(roll/2) * np.sin(pitch/2) * np.cos(yaw/2)
+        qw = np.cos(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) + np.sin(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
+        return qx, qy, qz, qw
 
-    vx = 0
-    vy = 0
-    vth = 3.14
+    def euler_from_quaternion(self, x, y, z, w):
+        t0 = 2.0 * (w * x + y * z)
+        t1 = 1.0 - 2.0 * (x * x + y * y)
+        roll = math.atan2(t0, t1)
+		
+        t2 = 2.0 * (w * y - z * x)
+        t2 = 1.0 if t2 > 1.0 else t2
+        t2 = -1.0 if t2 < -1.0 else t2
+        pitch = math.asin(t2)
+		
+        t3 = 2.0 * (w * z +x * y)
+        t4 = 1.0 - 2.0*(y * y + z * z)
+        yaw = math.atan2(t3, t4)
+		
+		#if yaw < 0:
+		#	yaw = self.map(yaw, -3.1399, -0.001, 3.1399, 6.2799)
+		
+        return roll, pitch, yaw
 
-    v1, v2, v3, v4 = rabbit.inverse_kinematic(0, vx, vy, vth, "numpy")
-
-    print(v1, v2, v3, v4)
-
-    # v1 = 10
-    # v2 = -10
-    # v3 = -10
-    # v4 = 10
-    # vx, vy, vth = rabbit.forward_kinematic(v1, v2, v3, v4, 0, "numpy")
-
-    # print(vx, vy, vth)
