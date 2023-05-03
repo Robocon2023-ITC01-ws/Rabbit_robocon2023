@@ -17,15 +17,15 @@ class RabbitModel():
     def forward_matrix(self, theta, type=None):
         if type=="numpy":
             J_for = (self.r/2)*np.array([
-                [ math.sin(theta+self.a1), -math.sin(theta+self.a2), math.sin(theta+self.a3), -math.sin(theta+self.a4)],
-                [ math.cos(theta+self.a1),  -math.cos(theta+self.a2),  math.cos(theta+self.a3),  -math.cos(theta+self.a4)],
-                [1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22)]
+                [math.sin(theta+self.a1), math.sin(theta+self.a2), -math.sin(theta+self.a3), -math.sin(theta+self.a4)],
+                [ math.cos(theta+self.a1),  math.cos(theta+self.a2),  -math.cos(theta+self.a3),  -math.cos(theta+self.a4)],
+                [1/(2*0.22), -1/(2*0.22), -1/(2*0.22), 1/(2*0.22)]
             ], dtype=np.float32)
         elif type=="sym":
             J_for = (self.r/2)*ca.vertcat(
-                ca.horzcat(ca.sin(theta+self.a1),  -ca.sin(theta+self.a2), ca.sin(theta+self.a3), -ca.sin(theta+self.a4)),
-                ca.horzcat(ca.cos(theta+self.a1),  -ca.cos(theta+self.a2), ca.cos(theta+self.a3), -ca.cos(theta+self.a4)),
-                ca.horzcat(1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22))
+                ca.horzcat(ca.sin(theta+self.a1),  ca.sin(theta+self.a2), -ca.sin(theta+self.a3), -ca.sin(theta+self.a4)),
+                ca.horzcat(ca.cos(theta+self.a1),  ca.cos(theta+self.a2), -ca.cos(theta+self.a3), -ca.cos(theta+self.a4)),
+                ca.horzcat(1/(2*0.22), -1/(2*0.22), -1/(2*0.22), 1/(2*0.22))
             )
         return J_for
 
@@ -33,15 +33,15 @@ class RabbitModel():
         if type=="numpy":
             J_inv = (1/self.r)*np.array([
                 [math.sin(theta+self.a1), math.cos(theta+self.a1), self.R],
-                [-math.sin(theta+self.a2), -math.cos(theta+self.a2), self.R],
-                [math.sin(theta+self.a3), math.cos(theta+self.a3), self.R],
+                [math.sin(theta+self.a2), math.cos(theta+self.a2), -self.R],
+                [-math.sin(theta+self.a3), -math.cos(theta+self.a3), -self.R],
                 [-math.sin(theta+self.a4), -math.cos(theta+self.a4), self.R]
             ], dtype=np.float32)
         elif type=="sym":
             J_inv = (1/self.r)*ca.vertcat(
                 (ca.sin(theta+self.a1), ca.cos(theta+self.a1), self.R),
-                (-ca.sin(theta+self.a2), -ca.cos(theta+self.a2), self.R),
-                (ca.sin(theta+self.a3), ca.cos(theta+self.a3), self.R),
+                (ca.sin(theta+self.a2), ca.cos(theta+self.a2), -self.R),
+                (-ca.sin(theta+self.a3), -ca.cos(theta+self.a3), -self.R),
                 (-ca.sin(theta+self.a4), -ca.cos(theta+self.a4), self.R)
             )
 
@@ -67,7 +67,7 @@ class RabbitModel():
         if type=="sym":
             vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix(angle, type)@ca.vertcat(v1, v2, v3, v4)
         elif type=="numpy":
-            vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix(angle, type)@np.array([v1, v2, v3, v4])
+            vec_for = self.rotation_matrix(angle, type.T)@self.forward_matrix(angle, type)@np.array([v1, v2, v3, v4])
 
         return vec_for
 

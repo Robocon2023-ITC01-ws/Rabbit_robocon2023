@@ -254,14 +254,9 @@ class MPCActionServer(Node):
             #                                self.current_w4])
             goal_feedback.goal_feedback = [self.current_x, self.current_y, self.current_yaw]
             goal_handle.publish_feedback(goal_feedback)
-            self.current_vx, self.current_vy, self.current_vth = self.rabbit_model.forward_kinematic(
-                                                                                                    v1_m1,
-                                                                                                    v2_m2,
-                                                                                                    v3_m3,
-                                                                                                    v4_m4,
-                                                                                                    sol_x.full()[2, self.index],
-                                                                                                    "numpy")
-            # print(self.test_num)
+            
+            # print(self.test_num)current_vy, self.current_vth = self.rabbit_model.forward_kinematic(
+                              
             # print(self.mpciter)
             self.mpciter += 1
             time.sleep(0.01)
