@@ -46,7 +46,7 @@ class TrajectoryGenerator(Node):
 
         self.path_publisher = self.create_publisher(Float32MultiArray, 'beizer_path', 10)
 
-        self.path_timer = self.create_timer(1/10, self.path_callback)
+        self.path_timer = self.create_timer(1/5, self.path_callback)
 
 
     def calc_planner(self, start_X, end_X, n_points, offset):
