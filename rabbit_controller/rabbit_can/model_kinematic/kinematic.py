@@ -28,10 +28,10 @@ class kinematic():
     #     return vec[0], vec[1], vec[2]
     def omni_inverse_kinematic(self, vx, vy, vth, theta):
         J_inv = (1/self.r)*np.array([
-            [np.sin(theta+np.pi/4),   np.cos(theta+np.pi/4), 0.22],
-            [-np.sin(theta+3*np.pi/4), -np.cos(theta+3*np.pi/4), 0.22],
-            [np.sin(theta+5*np.pi/4), np.cos(theta+5*np.pi/4), 0.22],
-            [-np.sin(theta+7*np.pi/4), -np.cos(theta+7*np.pi/4), 0.22]]) 
+            [np.sin(np.pi/4),   np.cos(np.pi/4), 0.22],
+            [-np.sin(3*np.pi/4), -np.cos(3*np.pi/4), 0.22],
+            [np.sin(5*np.pi/4), np.cos(5*np.pi/4), 0.22],
+            [-np.sin(7*np.pi/4), -np.cos(7*np.pi/4), 0.22]]) 
         rot_mat = np.array([
             [np.cos(theta), np.sin(theta), 0],
             [-np.sin(theta), np.cos(theta), 0],
@@ -43,8 +43,8 @@ class kinematic():
 
     def omni_forward_kinematic(self, w1, w2, w3, w4, theta):
         J = (self.r/2)*np.array([
-		[math.sin(theta+math.pi/4), -math.sin(theta+3*math.pi/4), math.sin(theta+5*math.pi/4), -math.sin(theta+7*math.pi/4)],
-        [ math.cos(theta+math.pi/4),  -math.cos(theta+3*math.pi/4),  math.cos(theta+5*math.pi/4),  -math.cos(theta+7*math.pi/4)],
+		[math.sin(math.pi/4), -math.sin(3*math.pi/4), math.sin(5*math.pi/4), -math.sin(7*math.pi/4)],
+        [ math.cos(math.pi/4),  -math.cos(3*math.pi/4),  math.cos(5*math.pi/4),  -math.cos(7*math.pi/4)],
         [1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22)]])
         rot_mat = np.array([
     		[np.cos(theta), np.sin(theta), 0],

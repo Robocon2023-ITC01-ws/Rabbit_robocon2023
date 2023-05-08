@@ -28,14 +28,14 @@ class ros_node(Node):
         self.vx = 0.0
         self.vy = 0.0
         self.vyaw = 0.0
-        self.step = 0.01
+        self.step = 1/120
 
         # Subscriber 
         self.input = self.create_subscription(Float32MultiArray, 'input_controls', self.input_callback, 10)
         self.states_est = self.create_publisher(Float32MultiArray, "state_est", 10)
         self.yaw_input = self.create_subscription(Vector3, "odometry", self.yaw_callback, 10)
 
-        self.state_timer = self.create_timer(0.01, self.state_callback)
+        self.state_timer = self.create_timer(1/100, self.state_callback)
         self.yaw = 0.0
 
         # ==== Back data ====
@@ -44,7 +44,9 @@ class ros_node(Node):
         self.velocity_callback = np.zeros(4)
         self.command_vel = np.zeros(3)
         self.input_vel = np.zeros(4)
-    
+
+    def yaw_callback(self, yaw_msg):
+        self.yaw = yaw_msg.z
     def input_callback(self, input_msg):
         self.input_vel = input_msg.data
 
@@ -68,20 +70,20 @@ class ros_node(Node):
         y = twist_msg.linear.y
         vel_yaw = twist_msg.angular.z
 
-        vx = self.kinematic.map(x, -1, 1, -1.0*self.maxV, self.maxV)
-        vy = self.kinematic.map(y, -1, 1, -1.0*self.maxV, self.maxV)
-        omega = self.kinematic.map(vel_yaw, -1, 1, -1.0*self.maxOmega, self.maxOmega)
+        # vx = self.kinematic.map(x, -1, 1, -1.0*self.maxV, self.maxV)
+        # vy = self.kinematic.map(y, -1, 1, -1.0*self.maxV, self.maxV)
+        # omega = self.kinematic.map(vel_yaw, -1, 1, -1.0*self.maxOmega, self.maxOmega)
 
         # print(vx, vy, omega)
 
-        v1, v2, v3, v4 = self.kinematic.omni_inverse_kinematic(vx, vy, omega, self.yaw)
+        v1, v2, v3, v4 = self.kinematic.omni_inverse_kinematic(x, y, vel_yaw, 0.0)
 
-        # print(v1, v2, v3, v4)
+        #print(v1, v2, v3, v4)
         
-        # v1 = 0
-        # v2 = 0
-        # v3 = 10
-        # v4 = 0
+        #v1 = 0
+        #v2 = 0
+        #v3 = 10
+        #v4 = 0
 
 
         V1 = int(self.kinematic.map(v1, -100, 100, 0, 65535))
@@ -128,10 +130,11 @@ class ros_node(Node):
             if(self.velocity_callback[i] <= 0.00153 and self.velocity_callback[i] >= -0.00153):
                 self.velocity_callback[i] = 0.0
         # print(self.wheel_cal[3])
-        self.command_vel[0], self.command_vel[1], self.command_vel[2] = self.kinematic.omni_forward_kinematic(self.velocity_callback[0], self.velocity_callback[1], self.velocity_callback[2], self.velocity_callback[3], self.yaw)
+        self.command_vel[0], self.command_vel[1], self.command_vel[2] = self.kinematic.omni_forward_kinematic(self.velocity_callback[0], self.velocity_callback[1], self.velocity_callback[2], self.velocity_callback[3], 0.0)
         self.vx, self.vy, self.vyaw = self.kinematic.omni_forward_kinematic(self.velocity_callback[0], self.velocity_callback[1], self.velocity_callback[2], self.velocity_callback[3], self.yaw)
         
         
+        print(self.wheel_vel)
 
     def state_callback(self):
         state_msg = Float32MultiArray()
@@ -139,7 +142,7 @@ class ros_node(Node):
         self.y = float(self.y + self.step * self.vy)
         # self.yaw += self.yaw + self.step * self.vyaw
         state_msg.data = [self.x ,self.y]
-        print(self.x,self.y)
+        # print(self.x,self.y)
 
         self.states_est.publish(state_msg)
 
@@ -159,8 +162,6 @@ class ros_node(Node):
         # print(self.velocity_callback)
         self.control_pub.publish(con_msg)
 
-    def yaw_callback(self, yaw_msg):
-    	self.yaw = yaw_msg.z
 
 
 def main(args=None):

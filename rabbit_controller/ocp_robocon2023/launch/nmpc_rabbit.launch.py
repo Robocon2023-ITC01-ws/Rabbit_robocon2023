@@ -13,7 +13,7 @@ def generate_launch_description():
     node2 = Node(
         package='ocp_robocon2023',
         name = 'beizer_node',
-        executable= 'beizer_path',
+        executable= 'beizer_path2',
     )
 
     ld.add_action(node2)

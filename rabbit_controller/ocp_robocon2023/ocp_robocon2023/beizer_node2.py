@@ -2,8 +2,8 @@ import rclpy
 import numpy as np
 
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray
-from sensor_msgs.msg import Imu
+from std_msgs.msg import Float32MultiArray, Bool
+from sensor_msgs.msg import Imu, Joy
 from .library.bezier_path import calc_bezier_path, calc_4points_bezier_path
 from tf_transformations import euler_from_quaternion
 
@@ -18,21 +18,23 @@ class TrajectoryGenerator(Node):
         self.current_y = 0.0
         self.current_yaw = 0.0
 
-        self.n_points = 200
-
         self.current_states = np.array([self.current_x, self.current_y, self.current_yaw])
         self.startX = [self.current_x, self.current_y, self.current_yaw]
 
+        self.n_points = 200
+
         self.goal_x = 0.0
         self.goal_y = 0.0
-        self.goal_yaw = 0.0
+        self.goal_yaw = 0.0 
 
         self.endX = [self.goal_x, self.goal_y, self.goal_yaw]
 
         self.path = np.zeros((self.n_points, 2))
-        self.offset = 20.0
+        self.offset = 5.0
 
         self.goal_states = np.zeros((3, self.n_points))
+
+        self.goal_cond = False
 
         self.path_x = np.zeros((self.n_points, 1))
         self.path_y = np.zeros((self.n_points, 1))
@@ -42,11 +44,14 @@ class TrajectoryGenerator(Node):
 
         self.odom_subscriber = self.create_subscription(Float32MultiArray, 'state_est', self.odom_callback, 10)
         self.imu_subscriber = self.create_subscription(Imu, 'imu/data2', self.imu_callback, 10)
-        self.goal_subscriber = self.create_subscription(Float32MultiArray, 'path_gen', self.goal_callback, 10)
+        self.goal_subscriber = self.create_subscription(Joy, 'joy', self.goal_callback, 10)
 
         self.path_publisher = self.create_publisher(Float32MultiArray, 'beizer_path', 10)
 
-        self.path_timer = self.create_timer(1/20, self.path_callback)
+        self.path_timer = self.create_timer(1/5, self.path_callback)
+
+        self.axes_list = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        self.button_list = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
     def calc_planner(self, start_X, end_X, n_points, offset):
@@ -94,48 +99,47 @@ class TrajectoryGenerator(Node):
 
         self.startX = [self.current_x, self.current_y, self.current_yaw]
 
-    def goal_callback(self, goal_msg):
-        self.goal_x = goal_msg.data[0]
-        self.goal_y = goal_msg.data[1]
-        self.goal_yaw = goal_msg.data[2]
+    def goal_callback(self, joy):
 
-        self.endX = [self.goal_x, self.goal_y, self.goal_yaw]
+        self.axes_list = joy.axes
+        self.button_list = joy.buttons
 
+        self.startX = [self.current_x, self.current_y, self.current_yaw]
+        self.endX = [3.0, 0.0, 0.0]
 
-        self.path, _ = self.calc_planner(
-             self.startX, self.endX, self.n_points, self.offset
-        )
+        if self.button_list[3] == 1:
+            self.goal_cond = True
 
-        #self.path, _ = calc_4points_bezier_path(
-        #    self.current_x, self.current_y, self.current_yaw,
-        #    self.goal_x, self.goal_y, self.goal_yaw, self.offset
-        #)
+        elif self.button_list[3] != 1:
+            self.goal_cond = False
+            print('Still in the current states')
 
-        self.path_x = self.path[:, 0]
-        self.path_y = self.path[:, 1]
-        self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
-
-        self.goal_states = np.vstack([self.path_x, self.path_y, self.path_yaw])
-
-        # print(self.goal_states[:, 2])
+        
     
     def path_callback(self):
         path_msg = Float32MultiArray()
 
-        if np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) > 0.2:
+        if self.goal_cond:
+            print('Calculating Path')
+            self.goal_states = np.loadtxt('/home/kenotic/ros2ocp_ws/src/ocp_robocon2023/ocp_robocon2023/library/path1.csv', delimiter=',', dtype=np.float32)
+        elif not self.goal_cond:
+            self.goal_states = np.tile(self.current_states.reshape(3, 1), self.n_points)
+        # if np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) > 0.2:
+        #     self.index += 2
+        #     if self.index >= self.n_points:
+        #         self.index = self.n_points - 1
+        # if np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) < 0.001:
+        #     self.index = 0 
+        if self.goal_cond:
             self.index += 4
-            if self.index >= self.n_points:
-                self.index = self.n_points - 1
-        if np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) < 0.001:
-            self.index = 0 
+            if self.index >= self.goal_states.shape[1]:
+                self.index = self.goal_states.shape[1]-1
+        if self.button_list[1] == 1:
+            self.index = 0
 
-        # if self.index >= self.n_points:
-        #     self.index = self.n_points - 1
-
-        path_msg.data = [float(self.path_x[self.index]), float(self.path_y[self.index]), float(self.path_yaw[self.index])]
+        path_msg.data = [float(self.goal_states[0, self.index]), float(self.goal_states[1, self.index]), float(self.goal_states[2, self.index])]
         self.path_publisher.publish(path_msg)
 
-        # self.index += 1
         print(self.index)
 
 

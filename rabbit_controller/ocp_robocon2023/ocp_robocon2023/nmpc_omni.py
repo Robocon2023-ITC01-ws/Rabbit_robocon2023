@@ -3,7 +3,7 @@ import numpy as np
 import casadi as ca
 
 from .library.casadi_solver_rabbit import CasadiNMPC
-from .library.rabbit_robot import RabbitModel
+from .library.rabbit_omni import RabbitModel
 from .library.bezier_path import calc_4points_bezier_path, calc_bezier_path
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
@@ -26,7 +26,7 @@ class NMPCRabbit(Node):
         self.lowU = [-30, -30, -30, -30]
         self.highU = [30, 30, 30, 30]
 
-        self.mat_Q = [750, 750, 750]
+        self.mat_Q = [750, 750, 2000]
         self.mat_R = [1, 1, 1, 1]
 
         self.goal_flag = False
@@ -38,7 +38,7 @@ class NMPCRabbit(Node):
         self.t0 = 0
         self.mpciter = 0
         self.sim_time = 23
-        self.speed_up = lambda t: 30*(1-np.exp(-2*t))
+        self.speed_up = lambda t: 20*(1-np.exp(-2*t))
         self.index = 0
 
         # Euler angle
@@ -49,9 +49,9 @@ class NMPCRabbit(Node):
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_yaw = 0.0
-        # self.current_vx = 0.0
-        # self.current_vy = 0.0
-        # self.current_vth = 0.0
+        self.current_vx = 0.0
+        self.current_vy = 0.0
+        self.current_vth = 0.0
         self.feedback_states = np.array([
                                         self.current_x,
                                         self.current_y,
@@ -117,6 +117,8 @@ class NMPCRabbit(Node):
         self.control_subscriber = self.create_subscription(Float32MultiArray, 'feedback_encoder', self.controls_callback, 10)
         self.quaternion_subscriber = self.create_subscription(Imu, 'imu/data2', self.quaternion_callback, 10)
         self.control_publisher = self.create_publisher(Float32MultiArray, 'input_controls', 10)
+        # self.twist_cmd = self.create_publisher(Twist, 'cmd_vel', 10)
+        # self.twist_timer = self.create_timer(0.05, self.twist_command)
         self.path_gen = self.create_subscription(Float32MultiArray, 'path_gen', self.path_callback, 10)
         self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
         self.solver_time = self.create_timer(mpc_timer, self.nmpc_solver)
@@ -287,6 +289,17 @@ class NMPCRabbit(Node):
         self.control_publisher.publish(con_msg)
 
         # self.get_logger().info("Publishing optimal control '%s'" % con_msg)
+
+    def twist_command(self):
+        twist = Twist()
+        
+        self.vx, self.vy, self.vth = self.rabbit_model.forward_kinematic(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, 0.0, "numpy")
+
+        #twist.linear.x = self.vx
+        #twist.linear.y = self.vy
+        #twist.angular.z = self.vth
+
+        #self.twist_cmd.publish(twist)
 
 
     def calc_planner(self, start_X, end_X, n_points, offset):

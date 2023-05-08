@@ -3,7 +3,7 @@ import numpy as np
 import casadi as ca
 
 from .library.casadi_solver_rabbit import CasadiNMPC
-from .library.rabbit_robot import RabbitModel
+from .library.rabbit_omni import RabbitModel
 from .library.bezier_path import calc_4points_bezier_path, calc_bezier_path
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, Int64, Bool
@@ -24,7 +24,7 @@ class NMPCRabbit(Node):
         self.highX = [ 6,  6, 3.14]
 
         self.lowU = [-30, -30, -30, -30]
-        self.highU = [30, 30, 30, 30]
+        self.highU = [30,30, 30, 30]
 
         self.mat_Q = [750, 750, 2000]
         self.mat_R = [1, 1, 1, 1]
@@ -38,8 +38,8 @@ class NMPCRabbit(Node):
         self.t0 = 0
         self.mpciter = 0
         self.sim_time = 23
-        self.speed_up = lambda t: 30*(1-np.exp(-2*t))
-        self.n_points = 100
+        self.speed_up = lambda t: 10*(1-np.exp(-2*t))
+        self.n_points = 200
 
         # Euler angle
 
@@ -49,9 +49,6 @@ class NMPCRabbit(Node):
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_yaw = 0.0
-        # self.current_vx = 0.0
-        # self.current_vy = 0.0
-        # self.current_vth = 0.0
         self.feedback_states = np.array([
                                         self.current_x,
                                         self.current_y,
@@ -218,17 +215,8 @@ class NMPCRabbit(Node):
         self.opt_u4 = sol_u.full()[3, self.index]
         ##############################################################################################################################
         ################################################## Shift Timestep ##################################################
-        # self.t0 = self.t0 + self.dt
-        self.current_states = self.feedback_states + self.dt * self.rabbit_model.forward_kinematic(
-             self.feedback_controls[0], self.feedback_controls[1],
-             self.feedback_controls[2], self.feedback_controls[3],
-             self.current_states[2], "numpy"
-        )
-        #self.current_states = self.feedback_states + self.dt * self.rabbit_model.forward_kinematic(
-        #    self.opt_u1, self.opt_u2,
-        #    self.opt_u3, self.opt_u4,
-        #    sol_x[2, self.index]  ,"numpy"
-        #)
+
+        self.current_states = ca.DM.full(self.feedback_states.reshape(3, 1) + self.dt * self.f(self.feedback_states, self.feedback_controls))
 
         self.states = np.tile(self.current_states.reshape(3, 1), self.N+1)
         self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
@@ -243,8 +231,6 @@ class NMPCRabbit(Node):
             self.next_trajectories[0, k+1] = self.goal_states[0]
             self.next_trajectories[1, k+1] = self.goal_states[1]
             self.next_trajectories[2, k+1] = self.goal_states[2]
-            # self.next_trajectories[:, k+1] = np.array([self.goal_x, self.goal_y, self.goal_yaw])
-            #self.next_trajectories[:, k+1] = np.array([
 
             if (np.linalg.norm(self.current_states-self.goal_states, 2) > 0.01):
                  self.next_controls = np.tile(np.array([30, 30, 30, 30], dtype=np.float64).reshape(4, 1), self.N)
@@ -268,9 +254,9 @@ class NMPCRabbit(Node):
         duration = (end_time - start_time )
         self.tick += 1
 
-        # print(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4)
+        print(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4)
 
-        # print(self.tick)
+
         
 
     def control_timer_pub(self):

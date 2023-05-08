@@ -18,8 +18,8 @@ def generate_launch_description():
 
     return LaunchDescription([
    
-        Node(package='rabbit_localization', executable= 'localization'),
+        # Node(package='rabbit_localization', executable= 'localization'),
         Node(package='rabbit_can',executable='can'),
-        Node(package='joy', executable='joy_node'),
+        # Node(package='joy', executable='joy_node'),
         #Node(package='rabbit_can', executable='joy'),
     ])
