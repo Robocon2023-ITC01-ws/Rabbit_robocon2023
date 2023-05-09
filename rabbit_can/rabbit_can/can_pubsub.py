@@ -78,10 +78,14 @@ class ros_node(Node):
 
     def can_callback(self):
         msg = can.Message(arbitration_id=0x111, is_extended_id=False, data=self.TxData)
-        self.bus.send(msg, 0.01)
-        for i in range(2):
-            can_msg = self.bus.recv(0.1)
+        try:
+            self.bus.send(msg, 0.01)
+            finish_recv = True
+        except can.CanError:
+            pass
+        while(finish_recv):
             try:
+                can_msg = self.bus.recv(0.1)
                 if (can_msg != None):
                     if can_msg.arbitration_id == 0x155:
                         self.wheel_vel[0] = (can_msg.data[0] << 8) + can_msg.data[1]
