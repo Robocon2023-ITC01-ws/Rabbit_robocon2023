@@ -31,13 +31,17 @@ class ImagePublisher(Node):
         # Publisher from Realsense
         self.image_publisher_rgb = self.create_publisher(Image, 'camera/input/rgb', 100)
         self.image_publisher_depth = self.create_publisher(Image, 'camera/input/depth', 100)
-        self.image_timer = self.create_timer(0.033, self.image_timer_callback)
+        self.image_timer = self.create_timer(0.05, self.image_timer_callback)
  
 
     def image_timer_callback(self):
+        
         ret, frame = self.capture.read()
 
-        frame = np.array(frame)
+
+        print(frame.shape)
+
+        frame = np.asarray(frame)
         img_msg = self.cv_bridge.cv2_to_imgmsg(frame, encoding="bgr8")
 
         self.image_publisher_rgb.publish(img_msg)

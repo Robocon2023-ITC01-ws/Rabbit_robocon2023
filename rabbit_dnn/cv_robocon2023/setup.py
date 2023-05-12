@@ -24,9 +24,11 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'camera_node_v1 = cv_robocon2023.image_publisher:main',
-            'camera_node_v2 = cv_robocon2023.image_publisher_cv:main',
+            'image_node = cv_robocon2023.image_publisher:main',
+            'camera_node = cv_robocon2023.image_publisher_cv:main',
             'yolov5_node = cv_robocon2023.yolov5_detection:main',
+            'color_node = cv_robocon2023.color_detect:main',
+            'realsense_node = cv_robocon2023.realsense_node:main'
         ],
     },
 )
