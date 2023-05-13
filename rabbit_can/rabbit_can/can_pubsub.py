@@ -5,7 +5,7 @@ from geometry_msgs.msg import Twist
 import numpy as np
 from model_kinematic.kinematic import *
 from std_msgs.msg import Float32MultiArray
-
+from std_msgs.msg import Int16, Int32
 class ros_node(Node):
     def __init__(self):
         super(ros_node, self).__init__('can_node')
@@ -23,6 +23,12 @@ class ros_node(Node):
         self.maxOmega = np.pi
         self.kinematic = kinematic()
 
+        # laser to shooter
+        self.laser_pub = self.create_publisher(Int16, 'laser', 10)
+        self.shooter_sub = self.create_subscription(Int32, 'shooter', self.shooter_callback, 10)
+        self.TxData1 = [0, 0, 0]
+
+
         # Subscriber 
         self.input = self.create_subscription(Float32MultiArray, 'input_control', self.input_callback, 10)
 
@@ -32,6 +38,7 @@ class ros_node(Node):
         self.velocity_callback = np.zeros(4)
         self.command_vel = np.zeros(3)
         self.input_vel = np.zeros(4)
+        self.pub_shooter_speed = 0
     
     def input_callback(self, input_msg):
         self.input_vel = input_msg.data
@@ -48,6 +55,21 @@ class ros_node(Node):
         # self.TxData[5] = (V3 & 0x00FF)
         # self.TxData[6] = ((V4 & 0xFF00) >> 8)
         # self.TxData[7] = (V4 & 0x00FF)
+
+    def shooter_callback(self, shooter_msg):
+        if (shooter_msg.data > 10):
+            self.TxData1[2] = 1
+            shooter_speed = shooter_msg.data
+        elif (shooter_msg.data < -10):
+            self.TxData1[2] = 0
+            shooter_speed = -shooter_msg.data
+        else:
+            self.TxData1[2] = 0
+            shooter_speed = 0
+        self.TxData1[0] = ((shooter_speed & 0xFF00) >> 8)
+        self.TxData1[1] = (shooter_speed & 0x00FF)
+        self.shoot_msg = can.Message(arbitration_id=0x222, data= self.TxData1, dlc= 3, is_extended_id= False)
+        self.pub_shooter_speed = 1
 
 
     def command_callback(self, twist_msg):
@@ -78,6 +100,7 @@ class ros_node(Node):
 
     def can_callback(self):
         msg = can.Message(arbitration_id=0x111, is_extended_id=False, data=self.TxData)
+        laser_msg = Int16()
         try:
             self.bus.send(msg, 0.01)
             finish_recv = True
@@ -137,4 +160,6 @@ def main(args=None):
 
 if __name__=='__main__':
     main()
+
+
 
