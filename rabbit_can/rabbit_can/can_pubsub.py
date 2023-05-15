@@ -5,7 +5,7 @@ from geometry_msgs.msg import Twist
 import numpy as np
 from model_kinematic.kinematic import *
 from std_msgs.msg import Float32MultiArray
-from std_msgs.msg import Int16, Int32
+from std_msgs.msg import Int16, Int32MultiArray
 class ros_node(Node):
     def __init__(self):
         super(ros_node, self).__init__('can_node')
@@ -25,7 +25,7 @@ class ros_node(Node):
 
         # laser to shooter
         self.laser_pub = self.create_publisher(Int16, 'laser', 10)
-        self.shooter_sub = self.create_subscription(Int32, 'shooter', self.shooter_callback, 10)
+        self.shooter_sub = self.create_subscription(Int32MultiArray, 'shooter', self.shooter_callback, 10)
         self.TxData1 = [0, 0, 0]
 
 
@@ -39,6 +39,7 @@ class ros_node(Node):
         self.command_vel = np.zeros(3)
         self.input_vel = np.zeros(4)
         self.pub_shooter_speed = 0
+        self.shooter_data = np.array([0,0])
     
     def input_callback(self, input_msg):
         self.input_vel = input_msg.data
@@ -57,15 +58,10 @@ class ros_node(Node):
         # self.TxData[7] = (V4 & 0x00FF)
 
     def shooter_callback(self, shooter_msg):
-        if (shooter_msg.data > 10):
-            self.TxData1[2] = 1
-            shooter_speed = shooter_msg.data
-        elif (shooter_msg.data < -10):
-            self.TxData1[2] = 0
-            shooter_speed = -shooter_msg.data
-        else:
-            self.TxData1[2] = 0
-            shooter_speed = 0
+        self.shooter_data = shooter_msg.data
+        shooter_speed = self.shooter_data[0]
+        self.TxData1[2] = self.shooter_data[1]
+        print(self.shooter_data)
         self.TxData1[0] = ((shooter_speed & 0xFF00) >> 8)
         self.TxData1[1] = (shooter_speed & 0x00FF)
         self.shoot_msg = can.Message(arbitration_id=0x222, data= self.TxData1, dlc= 3, is_extended_id= False)
@@ -102,6 +98,9 @@ class ros_node(Node):
         msg = can.Message(arbitration_id=0x111, is_extended_id=False, data=self.TxData)
         laser_msg = Int16()
         try:
+            if (self.pub_shooter_speed):
+                self.pub_shooter_speed = 0
+                self.bus.send(self.shoot_msg,0.01)
             self.bus.send(msg, 0.01)
             finish_recv = True
         except can.CanError:
@@ -126,13 +125,14 @@ class ros_node(Node):
 
                 else:
                     self.get_logger().error('time out on msg recv!')
+                    finish_recv = False
+                    
             except can.CanOperationError:
                 pass
             #print(self.velocity_callback)
         for i in range(len(self.velocity_callback)):
             if(self.velocity_callback[i] <= 0.00153 and self.velocity_callback[i] >= -0.00153):
                 self.velocity_callback[i] = 0.0
-        print(self.velocity_callback)
         self.command_vel[0], self.command_vel[1], self.command_vel[2] = self.kinematic.mecanum_forward_kinematic(self.velocity_callback[0], self.velocity_callback[1], self.velocity_callback[2], self.velocity_callback[3])
 
     def velocity(self):
@@ -160,6 +160,5 @@ def main(args=None):
 
 if __name__=='__main__':
     main()
-
 
 
