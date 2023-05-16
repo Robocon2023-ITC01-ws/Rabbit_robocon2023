@@ -28,6 +28,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 	"action/MPCAction.action"
 	)
 
+add_executable(pub_sub_node src/pub_sub.cpp)
+ament_target_dependencies(pub_sub_node rclcpp std_msgs)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
@@ -38,5 +41,11 @@ if(BUILD_TESTING)
   #set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
+
+install(TARGETS
+  pub_sub_node
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
