@@ -1,7 +1,7 @@
 import numpy as np
 
 import casadi as ca
-from casadi_solver_rabbit import CasadiNMPC
+from nmpc_solver import NMPCSolver
 from rabbit_omni import RabbitModel
 
 
@@ -32,22 +32,21 @@ initU = [0.0, 0.0, 0.0, 0.0]
 # highX = [5.0, 5.0,  np.pi]
 lowX = [-ca.inf, -ca.inf, -ca.inf]
 highX = [ca.inf, ca.inf, ca.inf]
-lowU = [-30, -30, -30, -30]
-highU =[ 30,  30,  30,  30]
+lowU = -30
+highU = 30
 # lowU = [-30, -20, -20, -20]
 # highU = [20, 20, 20, 20]
 mat_Q = [750, 750, 2000]
-mat_R = [0.01, 0.01, 0.01, 0.01]
+mat_R = [1, 1, 1, 1]
 
-controller = CasadiNMPC(
-    initX=initX, initU=initU,
+controller = NMPCSolver(
     lowX=lowX, highX=highX,
     lowU=lowU, highU=highU,
-    mat_Q=mat_Q, mat_R=mat_R,
-    N=N, dt=step_horizon, sim_time = 15
+    Q=mat_Q, R=mat_R,
+    N=N, dt=step_horizon
 )
 
-f, solver, args = controller.casadi_model_setup()
+f, solver, args = controller.nmpc_setup()
 
 
 while (mpciter * step_horizon < sim_time):
@@ -88,17 +87,22 @@ while (mpciter * step_horizon < sim_time):
         next_trajectories[2, 0] = current_states[2]
 
         next_trajectories[:, j+1] = np.array([
-            0,
-            0,
-            3.14
+            10,
+            10,
+            0.0
         ])
         if np.linalg.norm(current_states-next_trajectories[:, -1], 2) > 0.5:
             next_controls = np.tile(np.array([30, 30, 30, 30], dtype=np.float64), N)
         elif np.linalg.norm(current_states-next_trajectories[:, -1], 2) < 0.5:
             next_controls = np.tile(np.array([0, 0, 0, 0], dtype=np.float64), N)
-    x_next = current_states + step_horizon * model.forward_kinematic(u1, u2, u3, u4, theta, "numpy")
+    x_next = current_states + step_horizon * model.forward_kinematic_tran(u1, u2, u3, u4, theta, "numpy")
 
     current_states = x_next
+
+    u1 = np.round(u1, 3)
+    u2 = np.round(u2, 3)
+    u3 = np.round(u3, 3)
+    u4 = np.round(u4, 3)
     current_controls = np.array([u1, u2, u3, u4])
 
     states = np.tile(current_states.reshape(3, 1), N+1)
@@ -106,7 +110,8 @@ while (mpciter * step_horizon < sim_time):
 
     # print(current_states)
 
-    print(u1, u2, u3, u4)
+    # print(u1, u2, u3, u4)
+    print(np.round(model.forward_kinematic_tran(u1, u2, u3, u4, theta, "numpy"), 3))
 
     mpciter += 1
     

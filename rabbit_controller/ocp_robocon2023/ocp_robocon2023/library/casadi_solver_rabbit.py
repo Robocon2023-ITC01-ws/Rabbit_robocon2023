@@ -154,7 +154,7 @@ class CasadiNMPC:
             # Control weight matrix
             R = np.diag(self.mat_R)
 
-            RHS = self.rabbit_model.forward_kinematic(v1, v2, v3, v4, theta, "sym")
+            RHS = self.rabbit_model.forward_kinematic_tran(v1, v2, v3, v4, theta, "sym")
 
             # nonlinear function for mpc model
             f = ca.Function('f', [states, controls], [RHS])
@@ -189,6 +189,7 @@ class CasadiNMPC:
                     'ipopt.acceptable_tol': 1e-6,
                     'ipopt.acceptable_obj_change_tol': 1e-4,
                     'print_time': 0}
+            
             solver = ca.nlpsol('solver', 'ipopt', nlp_prob, opts)
 
             lbx = ca.DM.zeros((n_states*(self.N+1) + n_controls*self.N, 1))
@@ -224,96 +225,3 @@ class CasadiNMPC:
             }
 
             return f, solver, args
-
-
-    def casadi_nmpc_solver(self, initX, initU, type=None, run_type=None):
-        # simulation
-        t0 = 0
-        mpciter = 0
-        init_state = np.array([initX[0], initX[1], initX[2]]).reshape(1,-1)
-        current_state = init_state.copy()
-        init_control = np.array([initU[0], initU[1], initU[2], initU[3]]).reshape(1, -1)
-        state = np.tile(current_state.reshape(-1, 1), self.N+1).T
-        control = np.tile(init_control.reshape(-1, 1), self.N).T
-        next_trajectories = state.copy()
-        next_controls = control.copy()
-        f, solver, args = self.casadi_model_setup()
-        lbx = args['lbx']
-        ubx = args['ubx']
-        if run_type=="test":
-            while (mpciter * self.dt < self.sim_time):
-                current_time = mpciter * self.dt
-                args['p'] = np.concatenate((
-                    next_trajectories.reshape(-1, 1),
-                    next_controls.reshape(-1, 1))
-                )
-                args['x0'] = np.concatenate(
-                    (state.reshape(-1,1),
-                    control.reshape(-1,1))
-                )
-                sol = solver(
-                    x0=args['x0'],
-                    p = args['p'],
-                    lbx=args['lbx'],
-                    ubx=args['ubx'],
-                    lbg=args['lbg'],
-                    ubg=args['ubg'],
-                )
-                sol_x = ca.reshape(sol['x'][:3*(self.N+1)], 3, self.N+1)
-                sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
-                t0, current_state, state, control = self.shift_timestep(self.dt, t0, current_state, sol_x, sol_u, f)
-                next_trajectories, next_controls = self.reference_state_and_control(t0, self.dt, current_state, self.N, type=type)
-                print(f" optimal state :x = {np.round(sol_x.full()[0, self.index], 3)}, y = {np.round(sol_x.full()[1, self.index], 3)}, theta = {np.round(sol_x.full()[2, self.index], 3)}")
-                v1_m1, v2_m2, v3_m3, v4_m4 = sol_u.full()[0, self.index], sol_u.full()[1, self.index], sol_u.full()[2, self.index], sol_u.full()[3, self.index]
-                #print(v1_m1, v2_m2, v3_m3, v4_m4)
-                mpciter += 1
-
-        elif run_type=="ros2":
-            current_time = mpciter * self.dt
-            args['p'] = np.concatenate((
-                next_trajectories.reshape(-1, 1),
-                next_controls.reshape(-1, 1))
-            )
-            args['x0'] = np.concatenate(
-                (state.reshape(-1,1),
-                control.reshape(-1,1))
-            )
-            sol = solver(
-                x0=args['x0'],
-                p = args['p'],
-                lbx=args['lbx'],
-                ubx=args['ubx'],
-                lbg=args['lbg'],
-                ubg=args['ubg'],
-            )
-            sol_x = ca.reshape(sol['x'][:3*(self.N+1)], 3, self.N+1)
-            sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
-            t0, current_state, state, control = self.shift_timestep(self.dt, t0, current_state, sol_x, sol_u, f)
-            next_trajectories, next_controls = self.reference_state_and_control(t0, self.dt, current_state, self.N, type=type)
-            # print(f" optimal state :x = {np.round(sol_x.full()[0, self.index], 3)}, y = {np.round(sol_x.full()[1, self.index], 3)}, theta = {np.round(sol_x.full()[2, self.index], 3)}")
-            # v1_m1, v2_m2, v3_m3, v4_m4 = sol_u.full()[0, self.index], sol_u.full()[1, self.index], sol_u.full()[2, self.index], sol_u.full()[3, self.index]
-            print(v1_m1, v2_m2, v3_m3, v4_m4 )
-            # print()
-            mpciter += 1
-
-
-if __name__=="__main__":
-    initX = [0.0, 0.0, 0.0]
-    initU = [0.0, 0.0, 0.0, 0.0]
-    lowX =  [-5.0, -5.0,  -np.pi]
-    highX = [5.0, 5.0,  np.pi]
-    lowU = [-30, -30, -30, -30]
-    highU =[ 30,  30,  30,  30]
-    mat_Q = [5000, 5000, 5000]
-    mat_R = [0.001, 0.001, 0.001, 0.001]
-
-    controller = CasadiNMPC(
-        initX=initX, initU=initU,
-        lowX=lowX, highX=highX,
-        lowU=lowU, highU=highU,
-        mat_Q=mat_Q, mat_R=mat_R,
-        N=50, dt=0.1, sim_time = 15
-    )
-    controller.casadi_nmpc_solver(
-        initX, initU, type="traj1", run_type="test"
-    )

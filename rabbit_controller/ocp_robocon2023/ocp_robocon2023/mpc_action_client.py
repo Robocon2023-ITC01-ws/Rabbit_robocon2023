@@ -76,7 +76,7 @@ class MPCActionClient(Node):
 
 def main(args=None):
 
-    goal_states = [1.0, 1.0, 0.0]
+    goal_states = [2.0, 0.0, 0.0]
 
     rclpy.init(args=args)
 

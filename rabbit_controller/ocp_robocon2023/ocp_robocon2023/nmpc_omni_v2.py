@@ -4,10 +4,8 @@ import casadi as ca
 
 from .library.casadi_solver_rabbit import CasadiNMPC
 from .library.rabbit_omni import RabbitModel
-from .library.bezier_path import calc_4points_bezier_path, calc_bezier_path
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, Int64, Bool
-from geometry_msgs.msg import Twist, Pose, Vector3
 from sensor_msgs.msg import Imu
 from tf_transformations import euler_from_quaternion
 
@@ -23,8 +21,11 @@ class NMPCRabbit(Node):
         self.lowX =  [-6, -6, -3.14]
         self.highX = [ 6,  6, 3.14]
 
-        self.lowU = [-30, -30, -30, -30]
-        self.highU = [30,30, 30, 30]
+        self.lowU = [-15, -15, -15 , -15]
+        self.highU = [15, 15, 15, 15]
+
+        # self.lowU = [-20, -20, -20, -20]
+        # self.highU = [20, 20, 20, 20]
 
         self.mat_Q = [750, 750, 2000]
         self.mat_R = [1, 1, 1, 1]
@@ -33,16 +34,13 @@ class NMPCRabbit(Node):
 
         self.mpc_type = "circle"
         self.index = 0
-        self.N = 100
-        self.dt = 0.1
-        self.t0 = 0
+        self.N = 50
+        self.dt = 0.05
         self.mpciter = 0
-        self.sim_time = 23
-        self.speed_up = lambda t: 10*(1-np.exp(-2*t))
+        self.speed_up = lambda t: 20*(1-np.exp(-2*t))
         self.n_points = 200
 
         # Euler angle
-
 
         ## Simulation
         ### States
@@ -65,7 +63,7 @@ class NMPCRabbit(Node):
                                         self.current_w2,
                                         self.current_w3,
                                         self.current_w4
-                                    ], dtype=np.float64)
+                                    ], dtype=np.float32)
         self.init_states = self.feedback_states.copy()
         self.states = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
         self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
@@ -76,22 +74,16 @@ class NMPCRabbit(Node):
             lowX=self.lowX, highX=self.highX,
             lowU=self.lowU, highU=self.highU,
             mat_Q=self.mat_Q, mat_R=self.mat_R,
-            N=self.N, dt=self.dt, sim_time = self.sim_time
+            N=self.N, dt=self.dt, sim_time = 23
         )
-        ## Path Planner goal
-        self.goal_x = 0.0
-        self.goal_y = 0.0
-        self.goal_yaw = 0.0
 
-        self.goal_states = np.vstack([self.goal_x, self.goal_y, self.goal_yaw])
+        self.goal_states = np.zeros(3)
 
         ## Solver
         self.f, self.solver, self.args = self.casadi_solver.casadi_model_setup()
         self.rabbit_model = RabbitModel()
         ## Euclidean norm condition
         self.norm_cond = 0.0
-        self.tick = 0
-        self.reset_tick = False
 
         # Optimal Control
         self.opt_u1 = 0.0
@@ -100,17 +92,13 @@ class NMPCRabbit(Node):
         self.opt_u4 = 0.0
 
         ## ROS Setup
-        mpc_timer = 0.1
-        control_timer = 0.01
         self.odom_subscriber = self.create_subscription(Float32MultiArray, 'state_est', self.odom_callback, 10)
-        self.tick_publisher = self.create_publisher(Int64, 'tick', 10)
-        self.reset_tick_subscriber = self.create_subscription(Bool, 'reset_tick', self.reset_tick_callback, 10)
         self.control_subscriber = self.create_subscription(Float32MultiArray, 'feedback_encoder', self.controls_callback, 10)
         self.quaternion_subscriber = self.create_subscription(Imu, 'imu/data2', self.quaternion_callback, 10)
         self.control_publisher = self.create_publisher(Float32MultiArray, 'input_controls', 10)
         self.path_gen = self.create_subscription(Float32MultiArray, 'beizer_path', self.path_callback, 10)
-        self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
-        self.solver_time = self.create_timer(mpc_timer, self.nmpc_solver)
+        self.control_timer = self.create_timer(0.01, self.control_timer_pub)
+        self.solver_time = self.create_timer(0.1, self.nmpc_solver)
 
 
     def odom_callback(self, odom_msg):
@@ -139,42 +127,38 @@ class NMPCRabbit(Node):
 
         self.current_yaw = yaw
         
-        # self.get_logger().info("Current states '%s'" % odom_msg)
 
     def controls_callback(self, con_msg):
-        self.current_w1 = con_msg.data[0]
-        self.current_w2 = con_msg.data[1]
-        self.current_w3 = con_msg.data[2]
-        self.current_w4 = con_msg.data[3]
+        
+        for_vec_tran = self.rabbit_model.forward_kinematic_tran(con_msg.data[0], con_msg.data[1],
+                                    con_msg.data[2], con_msg.data[3], 0.0, "numpy")
+        
+        inv_vec = self.rabbit_model.inverse_kinematic(for_vec_tran[0], for_vec_tran[1], for_vec_tran[2], 0.0, "numpy")
+
+        self.current_w1 = inv_vec[0]
+        self.current_w2 = inv_vec[1]
+        self.current_w3 = inv_vec[2]
+        self.current_w4 = inv_vec[3]
+
         self.feedback_controls = np.array([
-                                        self.current_w1,
-                                        self.current_w2,
-                                        self.current_w3,
-                                        self.current_w4
+                                    self.current_w1,
+                                    self.current_w2,
+                                    self.current_w3,
+                                    self.current_w4
                                     ])
 
     def path_callback(self, path_msg):
 
-        self.goal_x = path_msg.data[0]
-        self.goal_y = path_msg.data[1]
-        self.goal_yaw = path_msg.data[2]
+        goal_x = path_msg.data[0]
+        goal_y = path_msg.data[1]
+        goal_yaw = path_msg.data[2]
 
-        self.goal_states = np.array([self.goal_x, self.goal_y, self.goal_yaw])
-
-
-        # print(self.goal_states)
-
-
-        # self.get_logger().info("Path is being calculated '%s'" % path_msg)
-
-    def reset_tick_callback(self, tick_msg):
-        self.reset_tick = tick_msg.data
+        self.goal_states = np.array([goal_x, goal_y, goal_yaw])
 
 
     def nmpc_solver(self):
-        tick_msg = Int64()
         start_time = self.get_clock().now()
-        if np.linalg.norm(self.goal_states-self.current_states, 2) > 0.3:
+        if np.linalg.norm(self.goal_states-self.current_states, 2) > 0.01:
             self.norm_cond += 0.05
             if np.linalg.norm(self.goal_states-self.current_states, 2) < 0.01:
                 self.norm_cond = 0.0
@@ -205,7 +189,6 @@ class NMPCRabbit(Node):
         sol_x = ca.reshape(sol['x'][:3*(self.N+1)], 3, self.N+1)
         sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
 
-
         # print(sol_x.full()[:, self.index])
         # print(sol_u.full()[:, self.index])
         ################################################## Obtained Optimal Control ##################################################
@@ -213,6 +196,17 @@ class NMPCRabbit(Node):
         self.opt_u2 = sol_u.full()[1, self.index]
         self.opt_u3 = sol_u.full()[2, self.index]
         self.opt_u4 = sol_u.full()[3, self.index]
+        ###### Saturation
+        if self.opt_u1 > self.highU or self.opt_u2 > self.highU or self.opt_u3 > self.highU or self.opt_u4 > self.highU:
+            self.opt_u1 = self.highU
+            self.opt_u2 = self.highU
+            self.opt_u3 = self.highU
+            self.opt_u4 = self.highU
+        elif self.opt_u1 < self.lowU or self.opt_u2 < self.lowU or self.opt_u3 < self.lowU or self.opt_u4 < self.lowU:
+            self.opt_u1 = self.lowU
+            self.opt_u2 = self.lowU
+            self.opt_u3 = self.lowU
+            self.opt_u4 = self.lowU
         ##############################################################################################################################
         ################################################## Shift Timestep ##################################################
 
@@ -221,10 +215,8 @@ class NMPCRabbit(Node):
         self.states = np.tile(self.current_states.reshape(3, 1), self.N+1)
         self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
         ################################################## Apply Next Prediction ##################################################
+        
         for k in range(self.N):
-            # index = self.mpciter + k
-            # if index >= self.goal_states.shape[1]:
-            #     index = self.goal_states.shape[1]-1
             self.next_trajectories[0, 0] = self.current_states[0]
             self.next_trajectories[1, 0] = self.current_states[1]
             self.next_trajectories[2, 0] = self.current_states[2]
@@ -232,57 +224,31 @@ class NMPCRabbit(Node):
             self.next_trajectories[1, k+1] = self.goal_states[1]
             self.next_trajectories[2, k+1] = self.goal_states[2]
 
-            if (np.linalg.norm(self.current_states-self.goal_states, 2) > 0.01):
-                 self.next_controls = np.tile(np.array([30, 30, 30, 30], dtype=np.float64).reshape(4, 1), self.N)
+            self.next_controls = np.tile(np.array([15, 15, 15, 15], dtype=np.float32), self.N)
+
+            if (np.linalg.norm(self.current_states-self.goal_states, 2) > 0.4):
+                self.next_controls = np.tile(np.array([15, 15, 15, 15], dtype=np.float64).reshape(4, 1), self.N)
             elif ((np.linalg.norm(self.current_states-self.goal_states, 2) < 0.01)):
-                 self.next_controls = np.tile(np.array([0, 0, 0, 0], dtype=np.float64).reshape(4, 1), self.N)
-                
-        tick_msg.data = self.tick
-
-        if self.tick >= self.n_points:
-            self.tick = self.n_points - 1
-
-        # if np.linalg.norm(self.current_states-self.goal_states, 2) < 0.001:
-        #     self.tick = 0
-        self.tick_publisher.publish(tick_msg)
-
+                self.next_controls = np.tile(np.array([0, 0, 0, 0], dtype=np.float64).reshape(4, 1), self.N)
         
 
         ############################################################################################################################
         end_time = self.get_clock().now()
 
         duration = (end_time - start_time )
-        self.tick += 1
-
-        print(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4)
-
-
-        
 
     def control_timer_pub(self):
         con_msg = Float32MultiArray()
-        self.opt_u1 = np.round(self.opt_u1, 4)
-        self.opt_u2 = np.round(self.opt_u2, 4)
-        self.opt_u3 = np.round(self.opt_u3, 4)
-        self.opt_u4 = np.round(self.opt_u4, 4)
-        con_msg.data = [self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4]
+        
+        for_vec = self.rabbit_model.forward_kinematic(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, 0.0, "numpy")
+
+        inv_vec_tran = self.rabbit_model.inverse_kinematic_tran(for_vec[0], for_vec[1], for_vec[2], 0.0, "numpy")
+
+        con_msg.data = [inv_vec_tran[0], inv_vec_tran[1], inv_vec_tran[2], inv_vec_tran[3]]
         self.control_publisher.publish(con_msg)
 
-        # self.get_logger().info("Publishing optimal control '%s'" % con_msg)
+        self.get_logger().info("Publishing optimal control")
 
-
-    def calc_planner(self, start_X, end_X, n_points, offset):
-        dist = np.hypot(start_X[0] - end_X[0], start_X[1]-end_X[1]) / offset
-        control_points =  np.array([
-            [start_X[0], start_X[1]],
-            [start_X[0] + dist * np.cos(start_X[2]), start_X[1] + dist * np.sin(start_X[2])],
-            [end_X[0] - dist * np.cos(end_X[2]), end_X[1] - dist * np.sin(end_X[2])],
-            [end_X[0], end_X[1]]
-        ])
-
-        path = calc_bezier_path(control_points, n_points)
-
-        return path, control_points
 
 
 def main(args=None):

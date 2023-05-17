@@ -4,7 +4,7 @@ import casadi as ca
 import time
 
 from .library.casadi_solver_rabbit import CasadiNMPC
-from .rabbit_robot import RabbitModel
+from .library.rabbit_omni import RabbitModel
 from .library.bezier_path import calc_4points_bezier_path, calc_bezier_path
 
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
@@ -12,8 +12,8 @@ from rclpy.node import Node
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from mpc_action.action import MPCAction
-from std_msgs.msg import Float32MultiArray, Float64
-from geometry_msgs.msg import Twist, Pose, Vector3
+from std_msgs.msg import Float32MultiArray
+from tf_transformations import euler_from_quaternion
 
 class MPCActionServer(Node):
 
@@ -22,13 +22,10 @@ class MPCActionServer(Node):
 
 
         ## ROS SETUP
-        mpc_timer = 0.1
-        control_timer = 0.01
-        cmd_timer = 0.01
-        self.odom_subscriber = self.create_subscription(Vector3, 'odometry', self.odom_callback, 100)
-        self.control_subscirber = self.create_subscription(Float32MultiArray, 'feedback_controls', self.controls_callback, 100)
+        self.odom_subscriber = self.create_subscription(Float32MultiArray, 'state_est', self.odom_callback, 100)
+        self.control_subscirber = self.create_subscription(Float32MultiArray, 'feedback_encoders', self.controls_callback, 100)
         self.control_publisher = self.create_publisher(Float32MultiArray, 'input_controls', 100)
-        self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
+        self.control_timer = self.create_timer(0.01, self.control_timer_pub)
         # ROS ACTION
         self.goal_handle = None
         self.mpc_server = ActionServer(
@@ -42,31 +39,28 @@ class MPCActionServer(Node):
         self.initX = [0.0, 0.0, 0.0]
         self.initU = [0.0, 0.0, 0.0, 0.0]
 
-        self.lowX =  [-3.0, -3.0, -np.pi]
-        self.highX = [ 3.0,  3.0,  np.pi]
+        self.lowX =  [-6, -6, -3.14]
+        self.highX = [ 6,  6, 3.14]
 
-        self.lowU = [-10, -10, -10, -10]
-        self.highU = [10, 10, 10, 10]
+        self.lowU = [-20, -20, -20, -20]
+        self.highU = [20, 20, 20, 20]
 
-        self.mat_Q = [75, 75, 90]
-        self.mat_R = [0.1, 0.1, 0.1, 0.1]
+        self.mat_Q = [750, 750, 2000]
+        self.mat_R = [1, 1, 1, 1]
 
         self.mpc_type = "circle"
         self.index = 0
-        self.N = 100
+        self.N = 50
         self.dt = 0.01
         self.t0 = 0
         self.mpciter = 0
         self.sim_time = 23
-        self.speed_up = lambda t: 10*(1-np.exp(-2*t))
+        self.speed_up = lambda t: 20*(1-np.exp(-2*t))
 
         ## States
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_yaw = 0.0
-        self.current_vx = 0.0
-        self.current_vy = 0.0
-        self.current_vth = 0.0
         self.feedback_states = np.array([
                                         self.current_x,
                                         self.current_y,
@@ -78,18 +72,23 @@ class MPCActionServer(Node):
         self.current_w2 = 0.0
         self.current_w3 = 0.0
         self.current_w4 = 0.0
+        self.opt_u1 = 0.0
+        self.opt_u2 = 0.0
+        self.opt_u3 = 0.0
+        self.opt_u4 = 0.0
         self.feedback_controls = np.array([
                                         self.current_w1,
                                         self.current_w2,
                                         self.current_w3,
                                         self.current_w4])
 
-        self.states = np.tile(self.feedback_states.reshape(-1,1), self.N+1).T
-        self.controls = np.tile(self.feedback_controls.reshape(-1,1), self.N).T
+        self.init_states = self.feedback_states.copy()
+        self.states = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
+        self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
         self.next_trajectories = self.states.copy()
         self.next_controls = self.controls.copy()
         self.casadi_solver = CasadiNMPC(
-                            initX=self.feedback_states, initU=self.feedback_controls[0],
+                            initX=self.init_states, initU=self.feedback_controls[0],
                             lowX=self.lowX, highX=self.highX,
                             lowU=self.lowU, highU=self.highU,
                             mat_Q=self.mat_Q, mat_R=self.mat_R,
@@ -128,11 +127,23 @@ class MPCActionServer(Node):
     def cancel_callback(self, goal_handle):
         self.get_logger().info('Received cancel request')
         return CancelResponse.ACCEPT
+    
+
+    def quaternion_callback(self, quat_msg):
+        q1 = quat_msg.orientation.x
+        q2 = quat_msg.orientation.y
+        q3 = quat_msg.orientation.z
+        q4 = quat_msg.orientation.w
+
+        orient_list = [q1, q2, q3, q4]
+
+        roll, pitch, yaw = euler_from_quaternion(orient_list)
+
+        self.current_yaw = yaw
 
     def odom_callback(self, odom_msg):
-        self.current_x = odom_msg.x
-        self.current_y = odom_msg.y
-        self.current_yaw = odom_msg.z
+        self.current_x = odom_msg.data[0]
+        self.current_y = odom_msg.data[1]
 
         self.feedback_states = np.array([
                                         self.current_x,
@@ -174,7 +185,7 @@ class MPCActionServer(Node):
         path_y = path[:, 1]
         path_yaw = np.append(np.arctan2(np.diff(path_y), np.diff((path_x))), goal_states[2])
 
-        return np.vstack([path_x, path_y, path_yaw]).T
+        return np.vstack([path_x, path_y, path_yaw])
     
 
     async def mpc_callback(self, goal_handle):
@@ -186,9 +197,8 @@ class MPCActionServer(Node):
         goal = np.array(goal_handle.request.goal_states)
         # print(goal)
         goal_states = self.path_beizer(goal)
-
-        while (np.linalg.norm(goal_states[goal_states.shape[0]-1] - self.current_states, 2) > 0.01):
-            if np.linalg.norm(goal_states[goal_states.shape[0]-1] - self.current_states, 2) > 0.3:
+        while (np.linalg.norm(goal_states[:, -1] - self.current_states, 2) > 0.01):
+            if np.linalg.norm(goal_states[:, -1] - self.current_states, 2) > 0.3:
                 self.norm_cond += 0.06
                 if self.norm_cond % 3 == 0:
                     self.norm_cond = 3.0
@@ -215,43 +225,40 @@ class MPCActionServer(Node):
 
             sol_x = ca.reshape(sol['x'][:3*(self.N+1)], 3, self.N+1)
             sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
+            ################################################## Obtained Optimal Control ##################################################
             self.opt_u1 = sol_u.full()[0, self.index]
             self.opt_u2 = sol_u.full()[1, self.index]
             self.opt_u3 = sol_u.full()[2, self.index]
             self.opt_u4 = sol_u.full()[3, self.index]
-            ########################### Shift Timestep ###########################
-            # self.t0 = self.t0 + self.dt
-            # f_value = self.f(self.feedback_states, self.feedback_controls)
-            # self.current_states = self.feedback_states + self.dt * f_value
-            self.states = np.tile(self.feedback_states.reshape(-1, 1), self.N+1).T
-            self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
-            # self.t0, self.feedback_states, self.states, self.controls = self.shift_timestep(self.dt, self.t0, self.feedback_states, sol_x, sol_u, self.f)
+            ##############################################################################################################################
+            ################################################## Shift Timestep ##################################################
+
+            self.current_states = ca.DM.full(self.feedback_states.reshape(3, 1) + self.dt * self.f(self.feedback_states, self.feedback_controls))
+
+            self.states = np.tile(self.current_states.reshape(3, 1), self.N+1)
+            self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
             ################################################## Apply Next Prediction ##################################################
+            
             for k in range(self.N):
                 index = self.mpciter + k
-                if index >= goal_states.shape[0]:
-                    index = goal_states.shape[0]-1
-                self.next_trajectories[0] = self.feedback_states.T
-                self.next_trajectories[k+1] = goal_states[index, :]
-                self.next_controls = np.tile(np.array([10, 10, 10, 10]).reshape(1, -1), self.N).T
-            ###########################################################################################################################
-            # v1_m1, v2_m2, v3_m3, v4_m4 = sol_u.full()[0, self.index], sol_u.full()[1, self.index], sol_u.full()[2, self.index], sol_u.full()[3, self.index]
-            # self.current_x = sol_x.full()[0, self.index]
-            # self.current_y = sol_x.full()[1, self.index]
-            # self.current_yaw = sol_x.full()[2, self.index]
-            # self.feedback_states = np.array([
-            #                            self.current_x,
-            #                            self.current_y,
-            #                            self.current_yaw])
-            # self.current_w1 = v1_m1
-            # self.current_w2 = v2_m2
-            # self.current_w3 = v3_m3
-            # self.current_w4 = v4_m4
-            # self.feedback_controls = np.array([
-            #                                self.current_w1,
-            #                                self.current_w2,
-            #                                self.current_w3,
-            #                                self.current_w4])
+
+                if index >= goal_states.shape[1]:
+                    index = goal_states.shape[1]-1
+                
+                self.next_trajectories[0, 0] = self.current_states[0]
+                self.next_trajectories[1, 0] = self.current_states[1]
+                self.next_trajectories[2, 0] = self.current_states[2]
+                self.next_trajectories[0, k+1] = goal_states[0, index]
+                self.next_trajectories[1, k+1] = goal_states[1, index]
+                self.next_trajectories[2, k+1] = goal_states[2, index]
+
+                self.next_controls = np.tile(np.array([15, 15, 15, 15], dtype=np.float32), self.N)
+
+                if (np.linalg.norm(self.current_states-goal_states[:, -1], 2) > 0.4):
+                    self.next_controls = np.tile(np.array([20, 20, 20, 20], dtype=np.float64).reshape(4, 1), self.N)
+                elif ((np.linalg.norm(self.current_states-goal_states[:, -1], 2) < 0.01)):
+                    self.next_controls = np.tile(np.array([0, 0, 0, 0], dtype=np.float64).reshape(4, 1), self.N)
+
             goal_feedback.goal_feedback = [self.current_x, self.current_y, self.current_yaw]
             goal_handle.publish_feedback(goal_feedback)
             
@@ -259,7 +266,7 @@ class MPCActionServer(Node):
                               
             # print(self.mpciter)
             self.mpciter += 1
-            time.sleep(0.01)
+            time.sleep(0.1)
 
         if (np.linalg.norm(goal_states[goal_states.shape[0]-1] - self.current_states, 2) == 0.01):
             goal_handle.succeed()
@@ -275,7 +282,7 @@ class MPCActionServer(Node):
         con_msg.data = [self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4]
         self.control_publisher.publish(con_msg)
 
-        self.get_logger().info("Publishing optimal control '%s'" % con_msg)
+        # self.get_logger().info("Publishing optimal control '%s'" % con_msg)
 
         
 

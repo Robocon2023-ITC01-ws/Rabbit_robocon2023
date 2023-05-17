@@ -27,7 +27,6 @@ setup(
         'console_scripts': [
             "test_timer = ocp_robocon2023.test_timer:main",
             "test_wait_timer = ocp_robocon2023.test_wait_timer:main",
-            "nmpc_elephant = ocp_robocon2023.nmpc_elephant:main",
             "fibonacci_action_server = ocp_robocon2023.fibonacci_action_server:main",
             "fibonacci_action_client = ocp_robocon2023.fibonacci_action_client:main",
             "nmpc_rabbit = ocp_robocon2023.nmpc_rabbit:main",

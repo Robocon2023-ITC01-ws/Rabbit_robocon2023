@@ -48,7 +48,7 @@ class TrajectoryGenerator(Node):
 
         self.path_publisher = self.create_publisher(Float32MultiArray, 'beizer_path', 10)
 
-        self.path_timer = self.create_timer(1/5, self.path_callback)
+        self.path_timer = self.create_timer(1/10, self.path_callback)
 
         self.axes_list = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         self.button_list = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -67,18 +67,6 @@ class TrajectoryGenerator(Node):
 
         return path, control_points
 
-
-    def odom_callback(self, odom_msg):
-        self.current_x = odom_msg.data[0]
-        self.current_y = odom_msg.data[1]
-
-        self.current_states = np.array([
-            self.current_x,
-            self.current_y,
-            self.current_yaw
-        ])
-
-    
     def imu_callback(self, quat_msg):
         q1 = quat_msg.orientation.x
         q2 = quat_msg.orientation.y
@@ -99,6 +87,18 @@ class TrajectoryGenerator(Node):
 
         self.startX = [self.current_x, self.current_y, self.current_yaw]
 
+
+    def odom_callback(self, odom_msg):
+        self.current_x = odom_msg.data[0]
+        self.current_y = odom_msg.data[1]
+
+        self.current_states = np.array([
+            self.current_x,
+            self.current_y,
+            self.current_yaw
+        ])
+
+
     def goal_callback(self, joy):
 
         self.axes_list = joy.axes
@@ -114,14 +114,16 @@ class TrajectoryGenerator(Node):
             self.goal_cond = False
             print('Still in the current states')
 
-        
     
     def path_callback(self):
         path_msg = Float32MultiArray()
 
         if self.goal_cond:
             print('Calculating Path')
-            self.goal_states = np.loadtxt('/home/kenotic/ros2ocp_ws/src/ocp_robocon2023/ocp_robocon2023/library/path1.csv', delimiter=',', dtype=np.float32)
+            if self.axes_list[7] == 1:
+                self.goal_states = np.loadtxt('/home/kenotic/ros2ocp_ws/src/ocp_robocon2023/ocp_robocon2023/library/path7.csv', delimiter=',', dtype=np.float32)
+            #if self.axes_list[6] == 1:
+             #   self.goal_states = np.loadtxt('/home/kenotic/ros2ocp_ws/src/ocp_robocon2023/ocp_robocon2023/library/path3.csv', delimiter=',', dtype=np.float32)
         elif not self.goal_cond:
             self.goal_states = np.tile(self.current_states.reshape(3, 1), self.n_points)
         # if np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) > 0.2:
@@ -131,7 +133,7 @@ class TrajectoryGenerator(Node):
         # if np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) < 0.001:
         #     self.index = 0 
         if self.goal_cond:
-            self.index += 4
+            self.index += 2
             if self.index >= self.goal_states.shape[1]:
                 self.index = self.goal_states.shape[1]-1
         if self.button_list[1] == 1:

@@ -65,8 +65,8 @@ class NMPCRabbit(Node):
 
         self.mpc_type = "circle"
         self.index = 0
-        self.N = 100
-        self.dt = 0.1
+        self.N = 50
+        self.dt = 0.05
         self.t0 = 0
         self.mpciter = 0
         self.sim_time = 23

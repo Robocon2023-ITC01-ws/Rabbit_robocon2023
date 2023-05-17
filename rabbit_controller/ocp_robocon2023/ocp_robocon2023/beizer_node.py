@@ -3,9 +3,10 @@ import numpy as np
 
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
-from sensor_msgs.msg import Imu
+from sensor_msgs.msg import Imu, Joy
 from .library.bezier_path import calc_bezier_path, calc_4points_bezier_path
 from tf_transformations import euler_from_quaternion
+import time
 
 
 class TrajectoryGenerator(Node):
@@ -39,14 +40,20 @@ class TrajectoryGenerator(Node):
         self.path_yaw = np.zeros((self.n_points, 1))
 
         self.index = 0
+        self.start_cond = False
 
         self.odom_subscriber = self.create_subscription(Float32MultiArray, 'state_est', self.odom_callback, 10)
         self.imu_subscriber = self.create_subscription(Imu, 'imu/data2', self.imu_callback, 10)
         self.goal_subscriber = self.create_subscription(Float32MultiArray, 'path_gen', self.goal_callback, 10)
 
         self.path_publisher = self.create_publisher(Float32MultiArray, 'beizer_path', 10)
+        self.joy_subscriber = self.create_subscription(Joy, 'joy', self.joy_callback, 10)
 
-        self.path_timer = self.create_timer(1/20, self.path_callback)
+        self.path_timer = self.create_timer(1/10, self.path_callback)
+
+        self.axes_list = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+        self.buttons_list = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+
 
 
     def calc_planner(self, start_X, end_X, n_points, offset):
@@ -94,6 +101,17 @@ class TrajectoryGenerator(Node):
 
         self.startX = [self.current_x, self.current_y, self.current_yaw]
 
+    def joy_callback(self, joy_msg):
+
+        self.axes_list = joy_msg.axes
+        self.buttons_list = joy_msg.buttons
+
+        if self.buttons_list[2] == 1:
+            self.start_cond = True
+        elif self.buttons_list[2] == 0:
+            self.start_cond = False
+
+
     def goal_callback(self, goal_msg):
         self.goal_x = goal_msg.data[0]
         self.goal_y = goal_msg.data[1]
@@ -120,23 +138,23 @@ class TrajectoryGenerator(Node):
         # print(self.goal_states[:, 2])
     
     def path_callback(self):
+        start = time.time()
         path_msg = Float32MultiArray()
 
-        if np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) > 0.2:
+        if ((np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) > 0.001) and (self.start_cond)):
             self.index += 4
             if self.index >= self.n_points:
                 self.index = self.n_points - 1
-        if np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) < 0.001:
+        if (np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) < 0.001) and (not self.start_cond):
             self.index = 0 
 
-        # if self.index >= self.n_points:
-        #     self.index = self.n_points - 1
 
         path_msg.data = [float(self.path_x[self.index]), float(self.path_y[self.index]), float(self.path_yaw[self.index])]
         self.path_publisher.publish(path_msg)
 
-        # self.index += 1
-        print(self.index)
+        print(time.time()-start)
+
+
 
 
 
