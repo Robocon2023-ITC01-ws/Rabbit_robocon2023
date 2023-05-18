@@ -197,16 +197,16 @@ class NMPCRabbit(Node):
         self.opt_u3 = sol_u.full()[2, self.index]
         self.opt_u4 = sol_u.full()[3, self.index]
         ###### Saturation
-        if self.opt_u1 > self.highU or self.opt_u2 > self.highU or self.opt_u3 > self.highU or self.opt_u4 > self.highU:
-            self.opt_u1 = self.highU
-            self.opt_u2 = self.highU
-            self.opt_u3 = self.highU
-            self.opt_u4 = self.highU
-        elif self.opt_u1 < self.lowU or self.opt_u2 < self.lowU or self.opt_u3 < self.lowU or self.opt_u4 < self.lowU:
-            self.opt_u1 = self.lowU
-            self.opt_u2 = self.lowU
-            self.opt_u3 = self.lowU
-            self.opt_u4 = self.lowU
+        # if self.opt_u1 > self.highU or self.opt_u2 > self.highU or self.opt_u3 > self.highU or self.opt_u4 > self.highU:
+        #     self.opt_u1 = self.highU
+        #     self.opt_u2 = self.highU
+        #     self.opt_u3 = self.highU
+        #     self.opt_u4 = self.highU
+        # elif self.opt_u1 < self.lowU or self.opt_u2 < self.lowU or self.opt_u3 < self.lowU or self.opt_u4 < self.lowU:
+        #     self.opt_u1 = self.lowU
+        #     self.opt_u2 = self.lowU
+        #     self.opt_u3 = self.lowU
+            # self.opt_u4 = self.lowU
         ##############################################################################################################################
         ################################################## Shift Timestep ##################################################
 

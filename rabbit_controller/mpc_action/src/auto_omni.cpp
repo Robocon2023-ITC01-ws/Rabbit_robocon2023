@@ -1,4 +1,4 @@
-#include "auto_omni.hpp"
+#include "mpc_action/auto_omni.hpp"
 
 AUTO_OMNI::AUTO_OMNI(
     double L, double r, double dt,

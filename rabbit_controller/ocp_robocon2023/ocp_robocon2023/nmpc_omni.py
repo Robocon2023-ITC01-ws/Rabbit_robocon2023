@@ -248,9 +248,9 @@ class NMPCRabbit(Node):
             self.next_trajectories[0, 0] = self.feedback_states[0]
             self.next_trajectories[1, 0] = self.feedback_states[1]
             self.next_trajectories[2, 0] = self.feedback_states[2]
-            # self.next_trajectories[:, k+1] = self.goal_states[:, self.index]
+            self.next_trajectories[:, k+1] = self.goal_states[:, self.index]
 
-            self.next_trajectories[:, k+1] = np.array([self.goal_x, self.goal_y, self.goal_yaw])
+            #self.next_trajectories[:, k+1] = np.array([self.goal_x, self.goal_y, self.goal_yaw])
             #self.next_trajectories[:, k+1] = np.array([
 
             if ((np.linalg.norm(self.feedback_states-self.goal_states[:, -1], 2) > 0.5) & (self.goal_flag)):
@@ -260,12 +260,12 @@ class NMPCRabbit(Node):
         ############################################################################################################################
         ##############################################################################################################################
         ################################################## Shift Timestep ##################################################
-        # x_next = self.feedback_states + self.dt * self.rabbit_model.forward_kinematic_tran(
-        #      self.feedback_controls[0], self.feedback_controls[1],
-        #      self.feedback_controls[2], self.feedback_controls[3],
-        #      self.feedback_states[2], "numpy"
-        # )
-        x_next = ca.DM.full(self.feedback_states.reshape(3, 1) + self.dt*self.f(self.feedback_states, self.feedback_controls))
+        x_next = self.feedback_states + self.dt * self.rabbit_model.forward_kinematic_tran(
+             self.feedback_controls[0], self.feedback_controls[1],
+             self.feedback_controls[2], self.feedback_controls[3],
+             self.feedback_states[2], "numpy"
+        )
+
         self.current_states = x_next
 
         self.states = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
