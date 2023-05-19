@@ -48,8 +48,8 @@ class AUTO_OMNI
         Slice all;
         Slice slice_states;
         Slice slice_controls;
-        DM Q_ = DM::zeros(n_states_, n_states_);
-        DM R_ = DM::zeros(n_controls_, n_controls_);
+        DM Q_ = DM::zeros(3, 3);
+        DM R_ = DM::zeros(4, 4);
         MX J_for = MX::ones(3, 4);
         MX cost_fn_ = 0.0;
         MX rhs_;

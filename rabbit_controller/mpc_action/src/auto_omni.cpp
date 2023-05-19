@@ -11,8 +11,9 @@ AUTO_OMNI::AUTO_OMNI(
     prediction_horizons_ = prediction_horizons;
     n_states_ = n_states;
     n_controls_ = n_controls;
-    slice_states = Slice(0, n_states_);
-    slice_controls = Slice(0, n_controls_);
+    slice_states = Slice(0, n_states);
+    slice_controls = Slice(0, n_controls);
+    
     lbg_ = DM::zeros((n_states_*(prediction_horizons_+1)), 1);
     ubg_ = DM::zeros((n_states_*(prediction_horizons_+1)), 1);
     a1_ = M_PI/4;
@@ -27,11 +28,13 @@ AUTO_OMNI::AUTO_OMNI(
     R_(1, 1) = 1;
     R_(2, 2) = 1;
     R_(3, 3) = 1;
+    
 }
 
 AUTO_OMNI::~AUTO_OMNI(){}
 
 void AUTO_OMNI::setup_mpc(){
+    
     // States
     MX x = MX::sym("x");
     MX y = MX::sym("y");
@@ -48,6 +51,7 @@ void AUTO_OMNI::setup_mpc(){
     MX X_ref = MX::sym("X_ref", n_states_, prediction_horizons_+1);
     MX U = MX::sym("U", n_controls_, prediction_horizons_);
     MX U_ref = MX::sym("U_ref", n_controls_, prediction_horizons_);
+    
 
     // Forward matrix
     J_for(0, 0) =  MX::sin(yaw+a1_);
@@ -62,14 +66,14 @@ void AUTO_OMNI::setup_mpc(){
     J_for(2, 1) = 1/(2*L_); 
     J_for(2, 2) = 1/(2*L_); 
     J_for(2, 3) = 1/(2*L_);
-
+    
 
     J_for = (r_/2)*J_for;
 
     rhs_ = MX::mtimes({J_for, controls});
 
     system_kinematic_ = Function("f", {states, controls}, {rhs_});
-
+    
 
     MX opt_var = MX::vertcat({
         MX::reshape(X, -1, 1),
@@ -81,7 +85,6 @@ void AUTO_OMNI::setup_mpc(){
         MX::reshape(U_ref, -1, 1)
     });
 
-
     g_ = X(slice_states, 0) - X_ref(slice_states, 0);
     g_ = MX::reshape(g_, -1, 1);
 
@@ -91,7 +94,6 @@ void AUTO_OMNI::setup_mpc(){
         MX con_err = U(slice_controls, k) - U_ref(slice_controls, k);
         cost_fn_ = cost_fn_ + MX::mtimes({st_err.T(), Q_, st_err}) + MX::mtimes({con_err.T(), R_, con_err});
     }
-
 
 
     cost_fn_ = cost_fn_ + MX::mtimes({(X(slice_states, prediction_horizons_)-X_ref(slice_states, prediction_horizons_)).T(),
@@ -162,6 +164,7 @@ void AUTO_OMNI::set_boundary(std::vector<double> x_min, std::vector<double> x_ma
         {"ubg", ubg_},
     };
 
+
 }
 
 void AUTO_OMNI::input_trajectory(
@@ -169,17 +172,15 @@ void AUTO_OMNI::input_trajectory(
         Eigen::Vector3d goal_states, Eigen::Vector4d goal_controls)
 {
     // Params
-
     std::vector<double> variables;
     std::vector<double> params;
-
     // 3 * (num_states+1) + 4 * num_control
 
     for (int j = 0; j < prediction_horizons_+1; j++)
     {
          for (int k = 0; k < 3; k++)
          {
-            variables.push_back(current_states[k]);
+            variables.push_back(current_states(k));
          }
     }
 
@@ -187,7 +188,7 @@ void AUTO_OMNI::input_trajectory(
     {
          for (int k = 0; k < 4; k++)
          {
-            variables.push_back(current_controls[k]);
+            variables.push_back(current_controls(k));
          }
     }
 
@@ -199,7 +200,7 @@ void AUTO_OMNI::input_trajectory(
     {
          for (int k = 0; k < 3; k++)
          {
-            params.push_back(goal_states[k]);
+            params.push_back(goal_states(k));
          }
     }
 
@@ -207,7 +208,7 @@ void AUTO_OMNI::input_trajectory(
     {
          for (int k = 0; k < 4; k++)
          {
-            params.push_back(goal_controls[k]);
+            params.push_back(goal_controls(k));
          }
     }
 
@@ -216,7 +217,6 @@ void AUTO_OMNI::input_trajectory(
         {"p", params}
     };
 
-    std::cout << args_["x0"] << std::endl;
 
 }
 
@@ -259,9 +259,9 @@ Eigen::VectorXd AUTO_OMNI::inverse_kinematic(
 {
     auto J = Eigen::MatrixXd(4, 3);
     J << sin(a1_+theta), cos(a1_+theta), L_,
-         sin(a2_+theta), cos(a2_+theta), L_,
+         -sin(a2_+theta), -cos(a2_+theta), L_,
          sin(a3_+theta), cos(a3_+theta), L_,
-         sin(a4_+theta), cos(a4_+theta), L_;
+         -sin(a4_+theta), -cos(a4_+theta), L_;
 
     J = (1/r_)*J;
 

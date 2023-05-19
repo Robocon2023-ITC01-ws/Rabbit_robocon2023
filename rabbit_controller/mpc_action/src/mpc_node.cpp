@@ -3,7 +3,7 @@
 #include <cstdlib>
 #include <chrono>
 #include <mpc_action/auto_omni.hpp>
-#include <Eigen/Core>
+#include <Eigen/Dense>
 #include <casadi/casadi.hpp>
 
 #include <rclcpp/rclcpp.hpp>
@@ -20,9 +20,7 @@ class MPCNODE: public rclcpp::Node
         MPCNODE()
         :Node ("mpc_node")
         {
-
-            mpc_controller -> setup_mpc();
-
+            mpc_controller -> setup_mpc(); 
             mpc_controller -> set_boundary(
                 x_min, x_max, u_min, u_max
             );
@@ -58,6 +56,7 @@ class MPCNODE: public rclcpp::Node
             path_x_ = path_msg->data[0];
             path_y_ = path_msg->data[1];
             path_yaw_ = path_msg->data[2];
+
         }
 
         void odom_callback(const std_msgs::msg::Float32MultiArray::SharedPtr odom_msg)
@@ -73,21 +72,23 @@ class MPCNODE: public rclcpp::Node
             auto q3 = imu_msg->orientation.z;
             auto q4 = imu_msg->orientation.w;
 
+            feedback_states_ << x_, y_, yaw_;
+
         }
 
         void control_callback(const std_msgs::msg::Float32MultiArray::SharedPtr con_msg)
         {
-            feedback_controls << con_msg->data[0], con_msg->data[1],
+            feedback_controls_ << con_msg->data[0], con_msg->data[1],
                                  con_msg->data[2], con_msg->data[3];
         }
 
         void mpc_solver()
         {
-            next_trajectories_ << path_x_, path_y_, path_yaw_;
+            Eigen::Vector3d next_trajectories_ << path_x_, path_y_, path_yaw_;
             next_controls_ << 15, 15, 15, 15;
 
             mpc_controller->input_trajectory(
-            current_states_, feedback_controls,
+            current_states_, feedback_controls_,
             next_trajectories_, next_controls_);
 
             results_all = mpc_controller->optimal_solution();
@@ -103,7 +104,7 @@ class MPCNODE: public rclcpp::Node
 
             opt_yaw = result_x[2];
 
-            current_states_ = feedback_states + dt_ * mpc_controller->forward_kinematic(
+            current_states_ = feedback_states_ + dt_ * mpc_controller->forward_kinematic(
                 u1_, u2_, u3_, u4_, opt_yaw
             );
 
@@ -115,6 +116,7 @@ class MPCNODE: public rclcpp::Node
 
         }
 
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     
     private:
         // ROS Declaration
@@ -129,18 +131,26 @@ class MPCNODE: public rclcpp::Node
         std_msgs::msg::Float32MultiArray con_pub_;
 
         // Params
-        Eigen::Vector3d feedback_states;
-        Eigen::Vector4d feedback_controls;
+        // Eigen::Vector3d feedback_states_ = Eigen::Vector3d(3);
+        // Eigen::Vector4d feedback_controls_ = Eigen::Vector4d(4);
+        // Eigen::Vector3d current_states_ = Eigen::Vector3d(3);
+        // Eigen::Vector4d current_controls_  = Eigen::Vector4d(4);
+        // Eigen::Vector3d next_trajectories_ = Eigen::Vector3d(3);
+        // Eigen::Vector4d next_controls_ = Eigen::Vector4d(4);
+
+        Eigen::Vector3d feedback_states_;
+        Eigen::Vector4d feedback_controls_;
         Eigen::Vector3d current_states_;
         Eigen::Vector4d current_controls_;
-        Eigen::VectorXd next_trajectories_;
-        Eigen::VectorXd next_controls_;
+        Eigen::Vector3d next_trajectories_;
+        Eigen::Vector4d next_controls_;
+
 
         // Robot params
         double r_ = 0.06;
         double L_ = 0.22;
         double dt_ = 0.1;
-        int prediction_horizons_ = 30;
+        int prediction_horizons_ = 10;
         int n_states_ = 3;
         int n_controls_ = 4;
 
