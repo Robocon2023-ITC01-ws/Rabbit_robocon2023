@@ -40,6 +40,10 @@ class TrajectoryGenerator(Node):
         self.path_yaw = np.zeros((self.n_points, 1))
 
         self.index = 0
+        self.N_IND_SEARCH = 10
+
+        self.target_ind, self.travel = self.calc_index_trajectory(self.current_states, self.path_x, self.path_y, 0)
+
         self.start_cond = False
 
         self.odom_subscriber = self.create_subscription(Float32MultiArray, 'state_est', self.odom_callback, 10)
@@ -79,6 +83,19 @@ class TrajectoryGenerator(Node):
             self.current_y,
             self.current_yaw
         ])
+
+    def calc_index_trajectory(self, state, cx, cy, pind):
+        
+        dx = [state[0] - icx for icx in cx[pind:(pind+self.N_IND_SEARCH)]]
+        dy = [state[1] - icy for icy in cy[pind:(pind+self.N_IND_SEARCH)]]
+
+        d = [idx ** 2 + idy **2 for (idx, idy) in zip(dx, dy)]
+
+        mind = min(d)
+
+        ind = d.index(mind) + pind
+
+        return ind, d[-1]
 
     
     def imu_callback(self, quat_msg):
@@ -124,11 +141,6 @@ class TrajectoryGenerator(Node):
              self.startX, self.endX, self.n_points, self.offset
         )
 
-        #self.path, _ = calc_4points_bezier_path(
-        #    self.current_x, self.current_y, self.current_yaw,
-        #    self.goal_x, self.goal_y, self.goal_yaw, self.offset
-        #)
-
         self.path_x = self.path[:, 0]
         self.path_y = self.path[:, 1]
         self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
@@ -141,16 +153,32 @@ class TrajectoryGenerator(Node):
         start = time.time()
         path_msg = Float32MultiArray()
 
-        if ((np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) > 0.001) and (self.start_cond)):
-            self.index += 4
-            if self.index >= self.n_points:
-                self.index = self.n_points - 1
-        if (np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) < 0.001) and (not self.start_cond):
-            self.index = 0 
+        self.target_ind, dist = self.calc_index_trajectory(self.current_states, self.path_x, self.path_y, self.target_ind)
+
+        self.travel += dist
+
+        self.index = int(np.round(self.travel / 1.0))
 
 
-        path_msg.data = [float(self.path_x[self.index]), float(self.path_y[self.index]), float(self.path_yaw[self.index])]
+        # if ((np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) > 0.001) and (self.start_cond)):
+        #     self.index += 4
+        #     if self.index >= self.n_points:
+        #         self.index = self.n_points - 1
+        # if (np.linalg.norm(self.current_states-self.goal_states[:, -1], 2) < 0.001) and (not self.start_cond):
+        #     self.index = 0 
+
+        if (self.target_ind + self.index) < len(self.path_x):
+            path_msg.data = [float(self.path_x[self.target_ind+self.index]),
+                             float(self.path_y[self.target_ind+self.index]),
+                             float(self.path_yaw[self.target_ind+self.index])]
+        else:
+            path_msg.data = [float(self.path_x[len(self.path_x)-1]),
+                             float(self.path_x[len(self.path_y)-1]),
+                             float(self.path_x[len(self.path_yaw)-1])]
+
         self.path_publisher.publish(path_msg)
+
+        print(self.index)
 
         print(time.time()-start)
 

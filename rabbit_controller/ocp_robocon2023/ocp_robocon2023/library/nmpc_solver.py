@@ -53,6 +53,20 @@ class NMPCSolver:
         cost_fn = 0.0
         g = X[:, 0] - X_ref[:, 0]
 
+        # rot_mat = ca.vertcat(
+        #     ca.horzcat(ca.cos(theta), ca.sin(theta), 0),
+        #     ca.horzcat(-ca.sin(theta), ca.cos(theta), 0),
+        #     ca.horzcat(0, 0, 1)
+        # )
+
+        # J = (0.06/2)*ca.vertcat(
+        #     ca.horzcat(ca.sin(ca.pi/4), -ca.sin(3*ca.pi/4), ca.sin(5*ca.pi/4), -ca.sin(7*ca.pi/4)),
+        #     ca.horzcat(ca.cos(ca.pi/4), -ca.cos(3*ca.pi/4), ca.cos(5*ca.pi/4), -ca.cos(7*ca.pi/4)),
+        #     ca.horzcat(1/(2*0.22), 1/(2*0.22),1/(2*0.22), 1/(2*0.22))
+        # )
+
+        # rhs = rot_mat.T@J@controls
+        
         rhs = self.rabbit_model.forward_kinematic_tran(u1, u2, u3, u4, theta, "sym")
 
         f = ca.Function('f', [states, controls], [rhs])

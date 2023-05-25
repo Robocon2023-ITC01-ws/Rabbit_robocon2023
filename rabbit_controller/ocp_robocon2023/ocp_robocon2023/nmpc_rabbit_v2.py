@@ -216,9 +216,9 @@ class NMPCRabbit(Node):
         sol_x = ca.reshape(sol['x'][:3*(self.N+1)], 3, self.N+1)
         sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
         ########################### Shift Timestep ###########################
-        self.t0 = self.t0 + self.dt
-        f_value = self.f(self.feedback_states, self.feedback_controls)
-        self.current_states = self.feedback_states + self.dt * f_value
+        # self.t0 = self.t0 + self.dt
+        # f_value = self.f(self.feedback_states, self.feedback_controls)
+        # self.current_states = self.feedback_states + self.dt * f_value
         self.states = np.tile(self.feedback_states.reshape(-1, 1), self.N+1).T
         self.controls = np.tile(self.feedback_controls.reshape(-1, 1), self.N).T
         ################################################## Apply Next Prediction ##################################################

@@ -4,7 +4,7 @@ import can
 from geometry_msgs.msg import Twist, Vector3
 import numpy as np
 from model_kinematic.kinematic import *
-from std_msgs.msg import Float32MultiArray
+from std_msgs.msg import Float32MultiArray, UInt16MultiArray
 
 class ros_node(Node):
     def __init__(self):
@@ -14,38 +14,15 @@ class ros_node(Node):
         self.bus = can.interface.Bus(channel='can0', interface = 'socketcan', bitrate = 1000000)
         self.command_sub = self.create_subscription(Twist, 'cmd_vel', self.command_callback, 100)
         self.can_timer = self.create_timer(self.timer, self.can_callback)
-        self.control_pub = self.create_publisher(Float32MultiArray, 'feedback_encoder',1)
-        self.odometry_publisher = self.create_publisher(Float32MultiArray, 'external_rotary', 10)
-        self.vel_pub = self.create_publisher(Twist, 'vel_data', 1)
-        self.timer_control = self.create_timer(self.vel_timer, self.control_callback)
-        self.timer_vel = self.create_timer(self.vel_timer, self.velocity)
-        self.rotary_timer = self.create_timer(0.05, self.rotary_model)
+        self.rotary_publisher = self.create_publisher(UInt16MultiArray, 'external_rotary', 10)
+        self.rotary_timer = self.create_timer(0.02, self.rotary_model)
         self.TxData = [128, 0, 128, 0, 128, 0, 128, 0]
         self.maxV = 1
         self.maxOmega = np.pi
         self.kinematic = kinematic()
-        self.x = 0.0
-        self.rx = 0.0
-        self.y = 0.0
-        self.ry = 0.0
-        self.yaw = 0.0
-        self.ryaw = 0.0
-        self.vx = 0.0
-        self.vy = 0.0
-        self.vyaw = 0.0
-        self.lx = 0.180
-        self.ly = 0.145
-        self.r = 0.0225
-        self.ppr = 8200
-        self.step = 1/125
 
         # Subscriber 
         self.input = self.create_subscription(Float32MultiArray, 'input_controls', self.input_callback, 10)
-        self.states_est = self.create_publisher(Float32MultiArray, "state_est", 10)
-        self.yaw_input = self.create_subscription(Vector3, "odometry", self.yaw_callback, 10)
-
-        self.state_timer = self.create_timer(1/120, self.state_callback)
-        self.yaw = 0.0
 
         # ==== Back data ====
         self.wheel_vel = np.zeros(4)
@@ -55,12 +32,10 @@ class ros_node(Node):
         self.input_vel = np.zeros(4)
 
         # Rotary data
-        self.rotary_data = np.zeros(2)
-
-    def yaw_callback(self, yaw_msg):
-        self.yaw = yaw_msg.z
+        self.rotary_data = [0, 0]
 
     def input_callback(self, input_msg):
+        
         self.input_vel = input_msg.data
 
         V1 = int(self.kinematic.map(self.input_vel[0], -100, 100, 0, 65535))
@@ -90,11 +65,6 @@ class ros_node(Node):
         # print(vx, vy, omega)
 
         v1, v2, v3, v4 = self.kinematic.omni_inverse_kinematic(vx, vy, omega, 0.0)
-
-        # v1 = 10
-        # v2 = 0
-        # v3 = 0 
-        # v4 = 0
 
         # print(v1, v2, v3, v4)
 
@@ -141,75 +111,20 @@ class ros_node(Node):
                     self.get_logger().error('time out on msg recv!')
             except can.CanOperationError:
                 pass
-            #print(self.velocity_callback)
+            print(self.rotary_data)
         for i in range(len(self.velocity_callback)):
             if(self.velocity_callback[i] <= 0.00153 and self.velocity_callback[i] >= -0.00153):
                 self.velocity_callback[i] = 0.0
-        self.command_vel[0], self.command_vel[1], self.command_vel[2] = self.kinematic.omni_forward_kinematic(self.velocity_callback[0], self.velocity_callback[1], self.velocity_callback[2], self.velocity_callback[3], 0.0)
-        self.vx, self.vy, self.vyaw = self.kinematic.omni_forward_kinematic(self.velocity_callback[0], self.velocity_callback[1], self.velocity_callback[2], self.velocity_callback[3], self.yaw)
     
         
         #print(self.wheel_vel)
     def rotary_model(self):
 
-        u1 = self.rotary_data[0]*2*np.pi/self.ppr
-        u2 = self.rotary_data[1]*2*np.pi/self.ppr
+        odom_msg = UInt16MultiArray()
 
-        data = Float32MultiArray()
+        odom_msg.data = [self.rotary_data[0], self.rotary_data[1]]
 
-        J_for = (self.r)*np.array([
-            [               (self.lx**2 + 1),                  (-self.lx*self.ly)],
-            [                  (-self.lx*self.ly),               (self.ly**2 + 1)],
-            [(-self.lx*(self.lx**2 + self.ly**2)-self.lx), (self.ly*(self.lx**2 + self.ly**2) + self.ly)]],
-            dtype=np.float64)
-
-
-        # J_for = (self.r/2)*np.array([
-        #     [1, 0],
-        #     [0, 1],
-        #     [-self.lx, self.ly]
-        # ], dtype=np.float64)
-
-        for_vec = J_for @ np.array([u1, u2], dtype=np.float64)
-
-        self.rx = self.rx + for_vec[0]*0.0333
-        self.ry = self.ry + for_vec[1]*0.0333
-        self.ryaw = self.ryaw + for_vec[2]*0.0333
-
-        data.data = [self.rx, self.ry, self.ryaw]
-
-        self.odometry_publisher.publish(data)
-
-
-    def state_callback(self):
-        state_msg = Float32MultiArray()
-        self.x = float(self.x + self.step * self.vx)
-        self.y = float(self.y + self.step * self.vy)
-
-        state_msg.data = [self.x ,self.y]                  
-
-        print("Velocity", self.vy, self.vy)
-        print("Position", self.x, self.y)
-
-        self.states_est.publish(state_msg)
-
-        # print(self.x, self.y)
-
-    def velocity(self):
-        vel_msg = Twist()
-        vel_msg.linear.x = self.command_vel[0]
-        vel_msg.linear.y = self.command_vel[1]
-        vel_msg.linear.z = 0.0
-        vel_msg.angular.x = 0.0
-        vel_msg.angular.y = 0.0
-        vel_msg.angular.z = self.command_vel[2]
-        self.vel_pub.publish(vel_msg)
-    
-    def control_callback(self):
-        con_msg = Float32MultiArray()
-        con_msg.data = [self.velocity_callback[0],self.velocity_callback[1],self.velocity_callback[2],self.velocity_callback[3]]
-        # print(self.velocity_callback)
-        self.control_pub.publish(con_msg)
+        self.rotary_publisher.publish(odom_msg)
 
 
 
@@ -222,5 +137,3 @@ def main(args=None):
 
 if __name__=='__main__':
     main()
-
-

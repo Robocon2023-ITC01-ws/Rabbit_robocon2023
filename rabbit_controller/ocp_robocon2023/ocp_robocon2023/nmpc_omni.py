@@ -19,27 +19,23 @@ class NMPCRabbit(Node):
         super().__init__('nmpc_rabbit')
         ## NMPC Params
 
-        self.lowX =  [-3, -3, -3.14]
-        self.highX = [ 3,  3,  3.14]
+        self.lowX =  [-6, -6, -3.14]
+        self.highX = [ 6,  6,  3.14]
 
-        # self.lowX = [-ca.inf, -ca.inf, -ca.inf]
-        # self.highX = [ca.inf, ca.inf, ca.inf]
+        self.lowU = -15
+        self.highU = 15
 
-        self.lowU = -20
-        self.highU = 20
-
-        self.mat_Q = [75, 75, 100]
-        self.mat_R = [0.1, 0.1, 0.1, 0.1]
-
+        self.mat_Q = [750, 750, 900]
+        self.mat_R = [1, 1, 1, 1]
 
         self.goal_flag = False
 
         self.N = 50
-        self.dt = 0.05
+        self.dt = 0.1
         self.t0 = 0
         self.mpciter = 0
-        self.speed_up = lambda t: 20*(1-np.exp(-2*t))
-        self.index = 0
+        self.speed_up = lambda t: 15*(1-np.exp(-2*t))
+        self.n_points = 100
 
         # Euler angle
 
@@ -49,9 +45,6 @@ class NMPCRabbit(Node):
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_yaw = 0.0
-        self.current_vx = 0.0
-        self.current_vy = 0.0
-        self.current_vth = 0.0
         self.feedback_states = np.array([
                                         self.current_x,
                                         self.current_y,
@@ -79,7 +72,13 @@ class NMPCRabbit(Node):
         self.goal_y = 0.0
         self.goal_yaw = 0.0
         self.n_points = 100
-        self.offset = 20.0
+        self.offset = 1.0
+        self.N_IND_SEARCH = 10
+        self.index = 5
+        self.travel = 0.0
+        self.dind = 0
+        self.old_nearest_index = 0
+        self.new_nearest_index = 0
         self.start_X = [self.feedback_states[0], self.feedback_states[1], self.feedback_states[2]]
         self.end_X = [self.goal_x, self.goal_y, self.goal_yaw]
 
@@ -114,12 +113,27 @@ class NMPCRabbit(Node):
         self.control_subscriber = self.create_subscription(Float32MultiArray, 'feedback_encoder', self.controls_callback, 10)
         self.quaternion_subscriber = self.create_subscription(Imu, 'imu/data2', self.quaternion_callback, 10)
         self.control_publisher = self.create_publisher(Float32MultiArray, 'input_controls', 10)
-        # self.twist_cmd = self.create_publisher(Twist, 'cmd_vel', 10)
-        # self.twist_timer = self.create_timer(0.05, self.twist_command)
         self.path_gen = self.create_subscription(Float32MultiArray, 'path_gen', self.path_callback, 10)
-        # self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
+        self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
         self.solver_time = self.create_timer(0.1, self.nmpc_solver)
 
+    def forward_kinematic(self, u1, u2,u3, u4, theta):
+
+        rot_mat = np.array([
+            [np.cos(theta), np.sin(theta), 0],
+            [-np.sin(theta), np.cos(theta), 0],
+            [0, 0, 1]
+        ], dtype=np.float64)
+
+        J = np.array([
+            [np.sin(np.pi/4), -np.sin(3*np.pi/4), np.sin(5*np.pi/4), -np.sin(7*np.pi/4)],
+            [np.cos(np.pi/4), -np.cos(3*np.pi/4), np.cos(5*np.pi/4), -np.cos(7*np.pi/4)],
+            [1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22)]
+        ], dtype=np.float64)
+
+        for_vec = rot_mat.T@J@np.array([u1, u2, u3, u4], dtype=np.float64)
+
+        return for_vec
 
     def quaternion_callback(self, quat_msg):
         q1 = quat_msg.orientation.x
@@ -144,20 +158,9 @@ class NMPCRabbit(Node):
                                         self.current_y,
                                         self.current_yaw
                                     ])
-        
-        # self.get_logger().info("Current states '%s'" % odom_msg)
+
 
     def controls_callback(self, con_msg):
-        
-        # for_vec_tran = self.rabbit_model.forward_kinematic_tran(con_msg.data[0], con_msg.data[1],
-        #                             con_msg.data[2], con_msg.data[3], 0.0, "numpy")
-        
-        # inv_vec = self.rabbit_model.inverse_kinematic(for_vec_tran[0], for_vec_tran[1], for_vec_tran[2], 0.0, "numpy")
-
-        # self.current_w1 = inv_vec[0]
-        # self.current_w2 = inv_vec[1]
-        # self.current_w3 = inv_vec[2]
-        # self.current_w4 = inv_vec[3]
 
         self.current_w1 = con_msg.data[0]
         self.current_w2 = con_msg.data[1]
@@ -171,6 +174,34 @@ class NMPCRabbit(Node):
                                     self.current_w4
                                     ])
 
+
+    def pi_2_pi(self, angle):
+        while(angle > np.pi):
+            angle = angle - 2.0 * np.pi
+
+        while(angle < -np.pi):
+            angle = angle + 2.0 * np.pi
+
+        return angle
+
+    def calc_index_trajectory(self, state_x, state_y, cx, cy, pind):
+
+        dx = [state_x - icx for icx in cx[pind:(pind + self.N_IND_SEARCH)]]
+        dy = [state_y - icy for icy in cy[pind:(pind + self.N_IND_SEARCH)]]
+
+        d = [idx**2 + idy**2 for (idx, idy) in zip(dx, dy)]
+
+        mind = min(d)
+
+        ind = d.index(mind) + pind
+
+        if pind >= ind:
+            ind = pind
+
+        # print(ind)
+
+        return ind
+    
     def path_callback(self, path_msg):
 
         self.goal_x = path_msg.data[0]
@@ -182,12 +213,6 @@ class NMPCRabbit(Node):
 
         self.path, _ = self.calc_planner(self.start_X, self.end_X, self.n_points, self.offset)
 
-        #self.path, _ = calc_4points_bezier_path(
-        #    self.start_X[0], self.start_X[1], self.start_X[2],
-        #    self.end_X[0], self.end_X[1], self.end_X[2],
-        #    self.offset
-        #)
-
         self.path_x = self.path[:, 0]
         self.path_y = self.path[:, 1]
         self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
@@ -196,22 +221,23 @@ class NMPCRabbit(Node):
 
         self.goal_flag = True
 
-        # self.get_logger().info("Path is being calculated '%s'" % path_msg)
-
 
     def nmpc_solver(self):
         start_time = time.time()
-        # self.goal_states[:, self.goal_states.shape[1]-1]
-        if np.linalg.norm(np.array([self.goal_x, self.goal_y])-self.feedback_states[0:2], 2) > 0.3:
+        if np.linalg.norm(self.goal_states[:, -1]-self.feedback_states, 2) > 0.3:
             self.norm_cond += 0.03
             self.args['lbx'][3*(self.N+1):] = -self.speed_up(self.norm_cond)
             self.args['ubx'][3*(self.N+1):] = self.speed_up(self.norm_cond)
-            if np.linalg.norm(np.array([self.goal_x, self.goal_y])-self.feedback_states[0:2], 2) < 0.01:
+            if np.linalg.norm(self.goal_states[:, -1]-self.feedback_states, 2) < 0.01:
                 self.norm_cond = 0.0
+                self.old_nearest_index = 0
+                self.new_nearest_index = 0
+                self.index = 0
+                self.dind = 0
+                self.travel = 0.0
         else:
             self.args['lbx'][3*(self.N+1):] = self.lowU
             self.args['ubx'][3*(self.N+1):] = self.highU
-            self.norm_cond = 0.0
         self.args['p'] = np.concatenate([
             self.next_trajectories.T.reshape(-1, 1),
             self.next_controls.T.reshape(-1, 1)
@@ -231,94 +257,77 @@ class NMPCRabbit(Node):
         
         sol_x = ca.reshape(sol['x'][:3*(self.N+1)], 3, self.N+1)
         sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
-
-
-        # print(sol_x.full()[:, self.index])
-        # print(sol_u.full()[:, self.index])
         ################################################## Obtained Optimal Control ##################################################
         self.opt_u1 = sol_u.full()[0, 0]
         self.opt_u2 = sol_u.full()[1, 0]
         self.opt_u3 = sol_u.full()[2, 0]
         self.opt_u4 = sol_u.full()[3, 0]
+
         ################################################## Apply Next Prediction ##################################################
-        for k in range(self.N):
-            self.index = self.mpciter + k
-            if self.index >= self.goal_states.shape[1]:
-                self.index = self.goal_states.shape[1]-1
+        self.old_nearest_index = self.index + self.dind
+        self.index = self.calc_index_trajectory(
+            self.feedback_states[0], self.feedback_states[1],
+            self.goal_states[0, :], self.goal_states[1, :], self.index
+        )
+
+        for_vec = self.forward_kinematic(
+            self.feedback_controls[0], self.feedback_controls[1],
+            self.feedback_controls[2], self.feedback_controls[3],
+            0.0,
+        )
+
+        vx = for_vec[0]
+        vy = for_vec[1]
+
+        v = np.sqrt(vx**2+vy**2)
+
+        self.travel += abs(v) * self.dt
+        self.dind = int(round(self.travel / 1.0))
+
+        self.new_nearest_index = self.index + self.dind
+
+        if (self.new_nearest_index - self.old_nearest_index) >= 2:
+            self.new_nearest_index = self.new_nearest_index + 1
+        if self.new_nearest_index > len(self.goal_states[0, :]):
+            self.new_nearest_index = len(self.goal_states[0, :])
+
+        for k in range(self.N+1):
+
             self.next_trajectories[0, 0] = self.feedback_states[0]
             self.next_trajectories[1, 0] = self.feedback_states[1]
             self.next_trajectories[2, 0] = self.feedback_states[2]
-            self.next_trajectories[:, k+1] = self.goal_states[:, self.index]
+    
+            if (self.new_nearest_index < len(self.goal_states[0, :])-1):
+                self.next_trajectories[0, k] = self.goal_states[0, self.new_nearest_index]
+                self.next_trajectories[1, k] = self.goal_states[1, self.new_nearest_index]
+                self.next_trajectories[2, k] = self.goal_states[2, self.new_nearest_index]
 
-            #self.next_trajectories[:, k+1] = np.array([self.goal_x, self.goal_y, self.goal_yaw])
-            #self.next_trajectories[:, k+1] = np.array([
+            else:
+                self.next_trajectories[0, k] = self.goal_states[0, len(self.goal_states[0, :])-1]
+                self.next_trajectories[1, k] = self.goal_states[1, len(self.goal_states[0, :])-1]
+                self.next_trajectories[2, k] = self.goal_states[2, len(self.goal_states[0, :])-1]
 
-            if ((np.linalg.norm(self.feedback_states-self.goal_states[:, -1], 2) > 0.5) & (self.goal_flag)):
-                 self.next_controls = np.tile(np.array([20, 20, 20, 20], dtype=np.float64).reshape(4, 1), self.N)
-            elif ((np.linalg.norm(self.feedback_states-self.goal_states[:, -1], 2) < 0.05)):
-                 self.next_controls = np.tile(np.array([0, 0, 0, 0], dtype=np.float64).reshape(4, 1), self.N)
-        ############################################################################################################################
-        ##############################################################################################################################
-        ################################################## Shift Timestep ##################################################
-        x_next = self.feedback_states + self.dt * self.rabbit_model.forward_kinematic_tran(
+        x_next = self.feedback_states + self.dt * self.forward_kinematic(
              self.feedback_controls[0], self.feedback_controls[1],
              self.feedback_controls[2], self.feedback_controls[3],
-             self.feedback_states[2], "numpy"
+             self.feedback_states[2]
         )
 
         self.current_states = x_next
 
-        self.states = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
+        self.states = np.tile(self.current_states.reshape(3, 1), self.N+1)
         self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
-        # if np.linalg.norm(self.goal_states[:, self.goal_states.shape[1]-1]-self.current_states, 2) > 0.01:
-        #    self.mpciter =+ 4
 
-        # elif np.linalg.norm(self.goal_states[:, self.goal_states.shape[1]-1]-self.current_states, 2) < 0.01:
-        #    self.index = 0 
-        #    self.mpciter =0
+        # print(np.linalg.norm(self.goal_states[:, -1]-self.feedback_states, 2))
+        print(self.new_nearest_index)
         
-        # print(self.rabbit_model.forward_kinematic_tran(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, self.feedback_states[2], "numpy"))
-        # print(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4)
-        # print(self.index)
-        # print(self.args['x0'])
-        con_msg = Float32MultiArray()
-        con_msg.data = [self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4]
-        self.control_publisher.publish(con_msg)
-        self.mpciter +=1
-        end_time = time.time()
-
-        print(self.norm_cond)
-        
-
-        duration = (end_time - start_time )
 
 
     def control_timer_pub(self):
         con_msg = Float32MultiArray()
-        
-        # for_vec = self.rabbit_model.forward_kinematic(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, 0.0, "numpy")
-
-        # inv_vec_tran = self.rabbit_model.inverse_kinematic_tran(for_vec[0], for_vec[1], for_vec[2], 0.0, "numpy")
-
-        # con_msg.data = [inv_vec_tran[0], inv_vec_tran[1], inv_vec_tran[2], inv_vec_tran[3]]
 
         con_msg.data = [self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4]
         self.control_publisher.publish(con_msg)
-
-        # self.get_logger().info("Publishing optimal control")
-
-        # self.get_logger().info("Publishing optimal control '%s'" % con_msg)
-
-    def twist_command(self):
-        twist = Twist()
-        
-        self.vx, self.vy, self.vth = self.rabbit_model.forward_kinematic(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, 0.0, "numpy")
-
-        #twist.linear.x = self.vx
-        #twist.linear.y = self.vy
-        #twist.angular.z = self.vth
-
-        #self.twist_cmd.publish(twist)
 
 
     def calc_planner(self, start_X, end_X, n_points, offset):

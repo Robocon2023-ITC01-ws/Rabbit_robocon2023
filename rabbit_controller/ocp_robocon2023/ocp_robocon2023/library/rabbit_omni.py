@@ -126,7 +126,7 @@ class RabbitModel():
     def forward_kinematic(self, v1, v2, v3, v4, angle, type=None):
 
         if type=="sym":
-            vec_for = self.rot_mat_sym(angle)@self.forward_matrix(angle, type)@ca.vertcat(v1, v2, v3, v4)
+            vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix(0.0, type)@ca.vertcat(v1, v2, v3, v4)
         elif type=="numpy":
             vec_for = self.forward_matrix(angle, type)@np.array([v1, v2, v3, v4])
 
@@ -135,9 +135,9 @@ class RabbitModel():
     def forward_kinematic_tran(self, v1, v2, v3, v4, angle, type=None):
 
         if type=="sym":
-            vec_for = self.forward_matrix_tran(angle, type)@ca.vertcat(v1, v2, v3, v4)
+            vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix_tran(0.0, type)@ca.vertcat(v1, v2, v3, v4)
         elif type=="numpy":
-            vec_for = self.forward_matrix_tran(angle, type)@np.array([v1, v2, v3, v4])
+            vec_for = self.rotation_matrix(angle, type).T@self.forward_matrix_tran(0.0, type)@np.array([v1, v2, v3, v4])
 
         return vec_for
     

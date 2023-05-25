@@ -22,6 +22,8 @@ setup(
         'console_scripts': [
             'can = rabbit_can.can_pubsub:main',
             'joy = rabbit_can.teleop_joy:main',
+            'rotary_node = rabbit_can.external_rotary:main',
+            'can2 = rabbit_can.can_node:main',
         ],
     },
 )
