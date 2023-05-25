@@ -4,7 +4,7 @@ import can
 from geometry_msgs.msg import Twist, Vector3
 import numpy as np
 from model_kinematic.kinematic import *
-from std_msgs.msg import Float32MultiArray, UInt16MultiArray
+from std_msgs.msg import Float32MultiArray, UInt16MultiArray, Int16, Int8, Int32MultiArray
 
 class ros_node(Node):
     def __init__(self):
@@ -24,12 +24,25 @@ class ros_node(Node):
         # Subscriber 
         self.input = self.create_subscription(Float32MultiArray, 'input_controls', self.input_callback, 10)
 
+        # laser to shooter
+        self.laser_pub = self.create_publisher(Int16, 'laser', 10)
+        self.shooter_sub = self.create_subscription(Int32MultiArray, 'shooter', self.shooter_callback, 10)
+        self.TxData1 = [0, 0, 0]
+
+        # pick up (int8 from controller digital control 1 to up and 0 to down)
+        self.pick_sub = self.create_subscription(Int8, 'pick_up', self.pick_up_callback, 10)
+
         # ==== Back data ====
         self.wheel_vel = np.zeros(4)
         self.wheel_cal = np.zeros(4)
         self.velocity_callback = np.zeros(4)
         self.command_vel = np.zeros(3)
         self.input_vel = np.zeros(4)
+
+        #============ Shooter part ==============
+        self.pub_shooter_speed = 0
+        self.shooter_data = np.array([0,0])
+        self.pick_up_command = 0
 
         # Rotary data
         self.rotary_data = [0, 0]
@@ -82,12 +95,35 @@ class ros_node(Node):
         self.TxData[6] = ((V2 & 0xFF00) >> 8)
         self.TxData[7] = (V2 & 0x00FF)
 
+    def pick_up_callback(self, pick_up_msg):
+        self.pick_up_command = pick_up_msg.data
+
+    def shooter_callback(self, shooter_msg):
+        self.shooter_data = shooter_msg.data
+        shooter_speed = self.shooter_data[0]
+        self.TxData1[2] = self.shooter_data[1]
+        self.TxData1[3] = self.pick_up_command
+        print(self.shooter_data)
+        self.TxData1[0] = ((shooter_speed & 0xFF00) >> 8)
+        self.TxData1[1] = (shooter_speed & 0x00FF)
+        
+        self.shoot_msg = can.Message(arbitration_id=0x222, data= self.TxData1, dlc= 4, is_extended_id= False)
+        self.pub_shooter_speed = 1
+
     def can_callback(self):
         msg = can.Message(arbitration_id=0x111, is_extended_id=False, data=self.TxData)
-        self.bus.send(msg, 0.01)
-        for i in range(2):
-            can_msg = self.bus.recv(0.1)
+        laser_msg = Int16()
+        try:
+            if (self.pub_shooter_speed):
+                self.pub_shooter_speed = 0
+                self.bus.send(self.shoot_msg,0.01)
+            self.bus.send(msg, 0.01)
+            finish_recv = True
+        except can.CanError:
+            pass
+        while(finish_recv):
             try:
+                can_msg = self.bus.recv(0.1)
                 if (can_msg != None):
                     if can_msg.arbitration_id == 0x155:
                         self.wheel_vel[0] = (can_msg.data[0] << 8) + can_msg.data[1]
@@ -100,10 +136,19 @@ class ros_node(Node):
                         self.wheel_vel[1] = (can_msg.data[2] << 8) + can_msg.data[3]
                         self.wheel_cal[2] = float(self.kinematic.map(self.wheel_vel[2], 0, 65535, -100, 100))
                         self.wheel_cal[1] = float(self.kinematic.map(self.wheel_vel[1], 0, 65535, -100, 100))
+                        finish_recv = False
 
-                    elif can_msg.arbitration_id == 0x333:   
+                    elif can_msg.arbitration_id == 0x333:  
+                        finish_recv = False 
                         self.rotary_data[0] = can_msg.data[0] << 8 | can_msg.data[1]
                         self.rotary_data[1] = can_msg.data[2] << 8 | can_msg.data[3]
+                        laser_int = can_msg.data[6] << 8 | can_msg.data[7]
+
+                        # laser to shooter
+                        pub_msg.data = [(self.Tick[0]), (self.Tick[1]), (self.Tick[2])]   
+                        laser_msg.data = laser_int
+                        self.laser_publisher_.publish(laser_msg)
+                        self.publisher_.publish(pub_msg)
                         
                     self.velocity_callback = np.array([self.wheel_cal[0],self.wheel_cal[1],self.wheel_cal[2],self.wheel_cal[3]])
 
