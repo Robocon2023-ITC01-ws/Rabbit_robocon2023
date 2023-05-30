@@ -35,6 +35,7 @@ setup(
             "mpc_action_client = ocp_robocon2023.mpc_action_client:main",
             "nmpc_omni = ocp_robocon2023.nmpc_omni:main",
             "nmpc_omni_v2 = ocp_robocon2023.nmpc_omni_v2:main",
+            "nmpc_params = ocp_robocon2023.nmpc_params:main",
             "beizer_path = ocp_robocon2023.beizer_node:main",
             "beizer_path2 = ocp_robocon2023.beizer_node2:main",
             "odometry = ocp_robocon2023.odometry_data:main",
