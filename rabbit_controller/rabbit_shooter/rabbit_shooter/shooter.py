@@ -5,7 +5,7 @@ from rclpy.node import Node
 from std_msgs.msg import Int16 # laser: subscribe the data from laser
 # from std_msgs.msg import Int32 # motor: publish the data to the motor 
 from std_msgs.msg import Int8 # button: to control shoot or not shoot
-from std_msgs.msg import Int32MultiArray, Int32
+from std_msgs.msg import Int32MultiArray, Int32, Float32
 from time import sleep
 
 from shooter.RR_shooter import *
@@ -15,6 +15,7 @@ class ShooterNode(Node):
         super().__init__('shooter_node')
 
         self.laser_sub = self.create_subscription(Int16, 'laser', self.laser_callback, 10)
+        
         self.button_sub = self.create_subscription(Int8, "shooter_command", self.button_callback, 10)
         self.shooter_pub = self.create_publisher(Int32, 'shooter', 10)
 
@@ -28,7 +29,7 @@ class ShooterNode(Node):
         button_command = int(button_msg.data)
         while(button_command == 1):
             self.laser_sub = self.create_subscription(Int16, 'laser', self.laser_callback, 10)
-            distance = (3.965 - 0.481)/(2411 - 120)*(self.laser_data - 120) + 0.481
+            distance = (3.201 - 0.265)/(3543 - 37)*(self.laser_data - 37) + 0.265
             print(distance)
             self.rps = int(shooter(distance).shooter())
             if(self.rps == 7433):
@@ -50,3 +51,15 @@ class ShooterNode(Node):
 
     def laser_callback(self, laser_msg):
         self.laser_data = laser_msg.data
+        
+
+def main(args=None):
+    rclpy.init(args=args)
+    shooter_node = ShooterNode()
+    rclpy.spin(shooter_node)
+    shooter_node.destroy_node()
+    rclpy.shutdown
+
+if __name__=='__main__':
+    main()
+

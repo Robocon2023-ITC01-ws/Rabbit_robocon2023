@@ -32,7 +32,7 @@ class Odometry(Node):
         
         self.odometry_publisher = self.create_publisher(Float32MultiArray, 'odometry_data', 10)
         # self.rotary_timer = self.create_timer(0.0333, self.rotary_calculation)
-        self.odometry_timer = self.create_timer(0.01, self.odometry_callback)
+        self.odometry_timer = self.create_timer(0.066, self.odometry_callback)
 
     def rotary_calculation(self, prev_state, u1, u2):
 

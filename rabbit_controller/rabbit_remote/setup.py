@@ -25,7 +25,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'ps4_node = rabbit_remote.ps4_control:main'
+            'ps3_node = rabbit_remote.ps3_control:main',
+            'ps3_nrf = rabbit_remote.ps3_nrf:main',
         ],
     },
 )

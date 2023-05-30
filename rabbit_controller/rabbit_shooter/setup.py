@@ -1,11 +1,12 @@
 from setuptools import setup
 
 package_name = 'rabbit_shooter'
+shooter_name = 'shooter'
 
 setup(
     name=package_name,
     version='0.0.0',
-    packages=[package_name],
+    packages=[package_name, shooter_name],
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
@@ -20,7 +21,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'shooter = rabbit_shooter.can_shooter:main',
+            'shooter = rabbit_shooter.shooter:main',
+            'command = rabbit_shooter.shoot_command:main',
         ],
     },
 )

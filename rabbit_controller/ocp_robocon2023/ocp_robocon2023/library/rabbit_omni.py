@@ -8,7 +8,7 @@ class RabbitModel():
     def __init__(self):
 
         # Kinematic Configuration
-        self.R = 0.245
+        self.R = 0.23
         self.r = 0.06
         self.a1 = np.pi/4
         self.a2 = 3*np.pi/4
@@ -54,7 +54,7 @@ class RabbitModel():
             J_for = (self.r/2)*np.array([
                 [ np.sin(theta+self.a1), -np.sin(theta+self.a2), np.sin(theta+self.a3), -np.sin(theta+self.a4)],
                 [ np.cos(theta+self.a1), -np.cos(theta+self.a2), np.cos(theta+self.a3), -np.cos(theta+self.a4)],
-                [1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22)]
+                [1/(2*self.R), 1/(2*self.R), 1/(2*self.R), 1/(2*self.R)]
             ], dtype=np.float64)
 
         elif type=="sym":
@@ -62,7 +62,7 @@ class RabbitModel():
             J_for = (self.r/2)*ca.vertcat(
                 ca.horzcat(ca.sin(theta+self.a1),  -ca.sin(theta+self.a2), ca.sin(theta+self.a3), -ca.sin(theta+self.a4)),
                 ca.horzcat(ca.cos(theta+self.a1),  -ca.cos(theta+self.a2), ca.cos(theta+self.a3), -ca.cos(theta+self.a4)),
-                ca.horzcat(1/(2*0.22), 1/(2*0.22), 1/(2*0.22), 1/(2*0.22))
+                ca.horzcat(1/(2*self.R), 1/(2*self.R), 1/(2*self.R), 1/(2*self.R))
             )
 
         return J_for

@@ -141,7 +141,7 @@ class ros_node(Node):
                     self.get_logger().error('time out on msg recv!')
             except can.CanOperationError:
                 pass
-            #print(self.velocity_callback)
+            print(self.wheel_cal)
         for i in range(len(self.velocity_callback)):
             if(self.velocity_callback[i] <= 0.00153 and self.velocity_callback[i] >= -0.00153):
                 self.velocity_callback[i] = 0.0
@@ -188,8 +188,8 @@ class ros_node(Node):
 
         state_msg.data = [self.x ,self.y]                  
 
-        print("Velocity", self.vy, self.vy)
-        print("Position", self.x, self.y)
+        # print("Velocity", self.vy, self.vy)
+        # print("Position", self.x, self.y)
 
         self.states_est.publish(state_msg)
 

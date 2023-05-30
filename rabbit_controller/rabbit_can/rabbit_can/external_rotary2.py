@@ -21,13 +21,13 @@ class RotaryNode(Node):
 
         self.yaw = 0.0
 
-        self.prev_state = np.zeros(3)
-        self.curr_state = np.zeros(3)
-        self.prev_tick = np.zeros(2, dtype=np.uint16)
-        self.curr_tick = np.zeros(2, dtype=np.uint16)
+        self.prev_state = ca.DM([0, 0, 0])
+        self.curr_state = ca.DM([0, 0, 0])
+        self.prev_tick = ca.DM([0, 0])
+        self.curr_tick = ca.DM([0, 0])
 
-        self.rotary_data = np.zeros(2, dtype=np.uint16)
-        self.diff_rotary = np.zeros(2, dtype=np.uint16)
+        self.rotary_data = ca.DM([0, 0])
+        self.diff_rotary = ca.DM([0, 0])
 
         self.first_init = True
 
@@ -40,25 +40,31 @@ class RotaryNode(Node):
         self.rotary_timer = self.create_timer(0.0333, self.rotary_calculation)
         self.odom_timer = self.create_timer(0.02, self.odom_callback)
 
-
-    def rotary_model(self, u1, u2, theta):
-
-        u1 = u1 * 2 * np.pi / self.ppr
-        u2 = u2 * 2 * np.pi / self.ppr
+        self.rotary_model()     
 
 
-        # print(np.array([u1, u2]))
+    def rotary_model(self):
+        
+        x = ca.SX.sym('x')
+        y = ca.SX.sym('y')
+        yaw = ca.SX.sym('yaw')
 
-        J = (self.r/2)*np.array([
-            [np.cos(0), np.sin(0)],
-            [np.sin(0), -np.cos(0)],
-            [0, 1/(2*0.145)]])
+        states = ca.vertcat(x, y, yaw)
 
-        for_vec = J@np.array([u1, u2])
+        u1 = ca.SX.sym('u1')
+        u2 = ca.SX.sym('u2')
 
-        # print(for_vec)
+        controls = ca.vertcat(u1, u2)
 
-        return for_vec
+        J = (self.r/2)*ca.DM([
+            [1,  0],
+            [0, -1],
+            [0, 1/(2*self.ly)]
+        ])
+
+        rhs = J@controls
+
+        self.f = ca.Function('f', [states, controls], [rhs])
 
 
     def rotary_callback(self, tick_msg):
@@ -66,28 +72,24 @@ class RotaryNode(Node):
         self.rotary_data[1] = tick_msg.data[1]
 
         if (self.first_init):
-            self.first_init = False
-            
-
             self.prev_tick = np.array([tick_msg.data[0], tick_msg.data[1]], dtype=np.uint16)
-
             self.curr_tick = self.prev_tick
-
+            self.first_init = False
         else:
             self.curr_tick = np.array([tick_msg.data[0], tick_msg.data[1]], dtype=np.uint16)
-            # print(self.prev_tick)
-
+            self.diff_rotary = self.curr_tick - self.prev_tick
             for i in range(2):
-
                 if (self.diff_rotary[i] > 32768):
                     self.diff_rotary[i] = self.diff_rotary[i] - 65535
+                    print(self.diff_rotary[0] - 65535)
                 elif (self.diff_rotary[i] < -32768):
                     self.diff_rotary[i] = self.diff_rotary[i] + 65535
 
-                self.curr_state = self.prev_state + self.rotary_model(self.diff_rotary[0], self.diff_rotary[1], 0.0)
-                self.prev_state = self.curr_state
+            self.curr_state = self.prev_state + self.f(self.prev_state, self.diff_rotary*2*np.pi/self.ppr)
 
-            self.prev_tick = self.curr_tick
+            self.prev_state = self.curr_state
+
+        self.prev_tick = self.curr_tick
 
         # print(self.diff_rotary)
         print(self.curr_state)

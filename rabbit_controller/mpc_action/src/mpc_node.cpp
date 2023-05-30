@@ -5,7 +5,6 @@
 #include <mpc_action/auto_omni.hpp>
 #include <Eigen/Dense>
 #include <casadi/casadi.hpp>
-
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <std_msgs/msg/float32_multi_array.hpp>
@@ -72,20 +71,32 @@ class MPCNODE: public rclcpp::Node
             auto q3 = imu_msg->orientation.z;
             auto q4 = imu_msg->orientation.w;
 
-            feedback_states_ << x_, y_, yaw_;
-
         }
 
         void control_callback(const std_msgs::msg::Float32MultiArray::SharedPtr con_msg)
         {
-            feedback_controls_ << con_msg->data[0], con_msg->data[1],
-                                 con_msg->data[2], con_msg->data[3];
+
+            fd_u1_ = con_msg->data[0];
+            fd_u2_ = con_msg->data[1];
+            fd_u3_ = con_msg->data[2];
+            fd_u4_ = con_msg->data[3];
+
         }
 
         void mpc_solver()
         {
-            Eigen::Vector3d next_trajectories_ << path_x_, path_y_, path_yaw_;
+            Eigen::Vector3d next_trajectories_ = Eigen::Vector3d(3);
+            next_trajectories_ << path_x_, path_y_, path_yaw_;
+
+            Eigen::Vector4d next_controls_ = Eigen::Vector4d(4);
             next_controls_ << 15, 15, 15, 15;
+
+            Eigen::Vector3d current_states_ = Eigen::Vector3d(3);
+            Eigen::Vector3d feedback_states_ = Eigen::Vector3d(3);
+            feedback_states_ << x_, y_, yaw_;
+
+            Eigen::Vector4d feedback_controls_ = Eigen::Vector4d(4);
+            feedback_controls_ << fd_u1_, fd_u2_, fd_u3_, fd_u4_;
 
             mpc_controller->input_trajectory(
             current_states_, feedback_controls_,
@@ -138,12 +149,12 @@ class MPCNODE: public rclcpp::Node
         // Eigen::Vector3d next_trajectories_ = Eigen::Vector3d(3);
         // Eigen::Vector4d next_controls_ = Eigen::Vector4d(4);
 
-        Eigen::Vector3d feedback_states_;
-        Eigen::Vector4d feedback_controls_;
-        Eigen::Vector3d current_states_;
-        Eigen::Vector4d current_controls_;
-        Eigen::Vector3d next_trajectories_;
-        Eigen::Vector4d next_controls_;
+        // Eigen::Vector3d feedback_states_;
+        // Eigen::Vector4d feedback_controls_;
+        // Eigen::Vector3d current_states_;
+        // Eigen::Vector4d current_controls_;
+        // Eigen::Vector3d next_trajectories_;
+        // Eigen::Vector4d next_controls_;
 
 
         // Robot params
@@ -168,6 +179,10 @@ class MPCNODE: public rclcpp::Node
         double u2_ = 0.0;
         double u3_ = 0.0;
         double u4_ = 0.0;
+        double fd_u1_ = 0.0;
+        double fd_u2_ = 0.0;
+        double fd_u3_ = 0.0;
+        double fd_u4_ = 0.0;
         double opt_yaw = 0.0;
 
         // Set boundary

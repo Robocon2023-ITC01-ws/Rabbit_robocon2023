@@ -66,9 +66,7 @@ class AUTO_OMNI
         DMDict args_;
         Function solver_;
         Function system_kinematic_;
-
-        Eigen::Vector3d current_states;
-        Eigen::Vector4d current_controls;
+        
 
 };
 
