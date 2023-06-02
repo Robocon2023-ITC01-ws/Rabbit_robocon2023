@@ -42,12 +42,14 @@ class ros_node(Node):
         self.laser_pub = self.create_publisher(Int16, 'laser', 10)
         self.shooter_sub = self.create_subscription(Int32, 'shooter', self.shooter_callback, 10)
         self.TxData1 = [0, 0, 0, 0]
+        self.TxData2 = [0]
 
         # pick up (int8 from controller digital control 1 to up and 0 to down)
         self.pick_sub = self.create_subscription(Int8, 'pick_up', self.pick_up_callback, 10)
 
         #============ Shooter part ==============
         self.pub_shooter_speed = 0
+        self.pub_pick = 0
         self.shooter_data = 0
         self.pick_up_command = 0
 
@@ -102,6 +104,9 @@ class ros_node(Node):
 
     def pick_up_callback(self, pick_up_msg):
         self.pick_up_command = pick_up_msg.data
+        self.TxData2[0] = self.pick_up_command
+        self.pick_msg = can.Message(arbitration_id=0x666, data=self.TxData2, dlc=1, is_extended_id=False)
+        self.pub_pick = 1
 
     def shooter_callback(self, shooter_msg):
         if (shooter_msg.data > 10):
@@ -116,12 +121,12 @@ class ros_node(Node):
             self.TxData1[2] = 0
             shooter_speed = 0
         
-        self.TxData1[3] = self.pick_up_command
+        # self.TxData1[3] = self.pick_up_command
         print(self.shooter_data)
         self.TxData1[0] = ((shooter_speed & 0xFF00) >> 8)
         self.TxData1[1] = (shooter_speed & 0x00FF)
         
-        self.shoot_msg = can.Message(arbitration_id=0x222, data= self.TxData1, dlc= 5, is_extended_id= False)
+        self.shoot_msg = can.Message(arbitration_id=0x222, data= self.TxData1, dlc= 4, is_extended_id= False)
         self.pub_shooter_speed = 1
 
     def can_callback(self):
@@ -131,8 +136,13 @@ class ros_node(Node):
             if (self.pub_shooter_speed):
                 self.pub_shooter_speed = 0
                 self.bus.send(self.shoot_msg,0.01)
+            elif (self.pub_pick):
+                self.pub_pick = 0
+                self.bus.send(self.pick_msg,0.01)
             self.bus.send(msg, 0.01)
             finish_recv = True
+           
+        
 
         except can.CanError:
             pass

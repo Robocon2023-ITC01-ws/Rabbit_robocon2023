@@ -47,11 +47,11 @@ class shooter():
         elif(X_in>1.05 and X_in <=1.1):
             X_in = X_in*3.05
         elif (X_in>1.1 and X_in<=1.2):
-            X_in = X_in*2
-        elif(X_in>1.2 and X_in<=1.3):
             X_in = X_in*1.9
+        elif(X_in>1.2 and X_in<=1.3):
+            X_in = X_in*2.35
         elif(X_in>1.3 and X_in<=1.4):
-            X_in = X_in * 2.1
+            X_in = X_in * 2.42
         elif(X_in> 1.4 and X_in<=1.5):
             X_in = self.map(X_in, 1.5, 0.5, 3.5, 1.5)
         elif(X_in>1.5 and X_in <= 1.7):
@@ -85,7 +85,7 @@ class shooter():
         elif(X_in>=5.5 and X_in<5.6):
             X_in = self.map(X_in,1.5, 0.5,3.5, 1.5)
         elif(X_in>0.7 and X_in<0.9):
-            X_in = 3.4*X_in 
+            X_in = 3.73*X_in 
         elif(X_in>0.6 and X_in<=0.7):
             X_in = 3.9*X_in
         else:
