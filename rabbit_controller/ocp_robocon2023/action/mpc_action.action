@@ -1,7 +1,0 @@
-#Goal states
-float32[] goal_states
----
-#Result states
-float32[] goal_reached
-#Feedback states
-float32 feedback_states

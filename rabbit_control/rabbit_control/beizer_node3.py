@@ -4,7 +4,7 @@ import numpy as np
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, Bool, String
 from sensor_msgs.msg import Imu, Joy
-from rabbit_control.rabbit_omni import RabbitModel
+from rabbit_control.rabbit_meca import RabbitModel
 from rabbit_control.bezier_path import calc_bezier_path, calc_4points_bezier_path
 from tf_transformations import euler_from_quaternion
 
@@ -181,8 +181,10 @@ class TrajectoryGenerator(Node):
 
             for j in range(self.N):
 
-                vx, vy, vyaw = self.rabbit_model.forward_kinematic(self.opt_u[0], self.opt_u[1],
-                                                                   self.opt_u[2], self.opt_u[3], 0.0, "numpy")
+                for_vec = self.rabbit_model.forward_kinematic(self.opt_u[0], self.opt_u[1],
+                                                              self.opt_u[2], self.opt_u[3], 0.0, "numpy")
+                vx = for_vec[0]
+                vy = for_vec[1]
                 
                 v = np.sqrt(vx**2+vy**2)
 
@@ -221,8 +223,10 @@ class TrajectoryGenerator(Node):
 
             for j in range(self.N):
 
-                vx, vy, vyaw = self.rabbit_model.forward_kinematic(self.opt_u[0], self.opt_u[1],
-                                                                   self.opt_u[2], self.opt_u[3], 0.0, "numpy")
+                for_vec = self.rabbit_model.forward_kinematic(self.opt_u[0], self.opt_u[1],
+                                                              self.opt_u[2], self.opt_u[3], 0.0, "numpy")
+                vx = for_vec[0]
+                vy = for_vec[1]
                 
                 v = np.sqrt(vx**2+vy**2)
 

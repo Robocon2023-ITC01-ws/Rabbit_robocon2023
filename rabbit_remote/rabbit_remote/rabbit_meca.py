@@ -8,9 +8,9 @@ class RabbitModel():
     def __init__(self):
 
         # Kinematic Configuration
-        self.r = 0.05
-        self.Lx = 0.20
-        self.Ly = 0.20
+        self.r = 0.0475 
+        self.Lx = 0.1925
+        self.Ly = 0.1775
 
 
     def forward_matrix(self, type=None):
@@ -81,9 +81,9 @@ class RabbitModel():
     def inverse_kinematic(self, vx, vy, vth, angle, type):
 
         if type=="sym":
-            vec_inv = self.inverse_matrix(angle, type)@ca.vertcat(vx, vy, vth)
+            vec_inv = self.inverse_matrix(type)@ca.vertcat(vx, vy, vth)
         elif type=="numpy":
-            vec_inv = self.inverse_matrix(angle, type)@np.array([vx, vy, vth])
+            vec_inv = self.inverse_matrix(type)@np.array([vx, vy, vth])
         return vec_inv
 
 

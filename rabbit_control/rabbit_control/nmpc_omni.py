@@ -24,6 +24,10 @@ class NMPCRabbit(Node):
         self.lowU = -20
         self.highU = 20
 
+        self.r = 0.0475 
+        self.lx = 0.1925
+        self.ly = 0.1775
+
         self.mat_Q = [1000, 1000, 2500]
         self.mat_R = [1, 1, 1, 1]
 
@@ -53,55 +57,55 @@ class NMPCRabbit(Node):
 
         ## Simulation
         ### States
-        # self.current_x = 0.0
-        # self.current_y = 0.0
-        # self.current_yaw = 0.0
-        # self.feedback_states = np.array([
-        #                                 self.current_x,
-        #                                 self.current_y,
-        #                                 self.current_yaw
-        #                             ], dtype=np.float64)
-        # self.current_states = self.feedback_states.copy()
-        ## Controls
-        # self.current_w1 = 0.0
-        # self.current_w2 = 0.0
-        # self.current_w3 = 0.0
-        # self.current_w4 = 0.0
-        # self.feedback_controls = np.array([
-        #                                 self.current_w1,
-        #                                 self.current_w2,
-        #                                 self.current_w3,
-        #                                 self.current_w4
-        #                             ], dtype=np.float64)
+        self.current_x = 0.0
+        self.current_y = 0.0
+        self.current_yaw = 0.0
+        self.feedback_states = np.array([
+                                        self.current_x,
+                                        self.current_y,
+                                        self.current_yaw
+                                    ], dtype=np.float64)
+        self.current_states = self.feedback_states.copy()
+        # Controls
+        self.current_w1 = 0.0
+        self.current_w2 = 0.0
+        self.current_w3 = 0.0
+        self.current_w4 = 0.0
+        self.feedback_controls = np.array([
+                                        self.current_w1,
+                                        self.current_w2,
+                                        self.current_w3,
+                                        self.current_w4
+                                    ], dtype=np.float64)
 
-        # self.states = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
-        # self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
-        # self.next_trajectories = self.states.copy()
-        # self.next_controls = self.controls.copy()
-        # ## Path Planner goal
-        # self.goal_x = 0.0
-        # self.goal_y = 0.0
-        # self.goal_yaw = 0.0
-        # self.offset = 3.0
-        # self.N_IND_SEARCH = 10
-        # self.prev_index = 0
-        # self.next_index = 0
-        # self.pred_index = self.prev_index + self.next_index
-        # self.index = 0
-        # self.dind = 0
-        # self.start_X = [self.feedback_states[0], self.feedback_states[1], self.feedback_states[2]]
-        # self.end_X = [self.feedback_states[0], self.feedback_states[1], self.feedback_states[2]]
+        self.states = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
+        self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
+        self.next_trajectories = self.states.copy()
+        self.next_controls = self.controls.copy()
+        ## Path Planner goal
+        self.goal_x = 0.0
+        self.goal_y = 0.0
+        self.goal_yaw = 0.0
+        self.offset = 3.0
+        self.N_IND_SEARCH = 10
+        self.prev_index = 0
+        self.next_index = 0
+        self.pred_index = self.prev_index + self.next_index
+        self.index = 0
+        self.dind = 0
+        self.start_X = [0.0, 0.0, 0.0]
+        self.end_X = [0.0, 0.0, 0.0]
 
-        # self.path, _ = self.calc_planner(self.start_X, self.end_X, self.n_points, self.offset)
+        self.path, _ = self.calc_planner(self.start_X, self.end_X, self.n_points, self.offset)
 
-        # self.path_x = self.path[:, 0]
-        # self.path_y = self.path[:, 1]
-        # self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
+        self.path_x = self.path[:, 0]
+        self.path_y = self.path[:, 1]
+        self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
 
-        # self.goal_states = np.vstack([self.path_x, self.path_y, self.path_yaw])
+        self.goal_states = np.vstack([self.path_x, self.path_y, self.path_yaw])
 
 
-        # self.target_ind = self.calc_index_trajectory(self.current_x, self.current_y, self.goal_states[0, :], self.goal_states[1, :], 1)
+        self.target_ind = self.calc_index_trajectory(self.current_x, self.current_y, self.goal_states[0, :], self.goal_states[1, :], 3)
 
 
         self.goal_flag = False
@@ -129,38 +133,6 @@ class NMPCRabbit(Node):
     def odom_callback(self, odom_msg):
         self.current_x = odom_msg.data[0]
         self.current_y = odom_msg.data[1]
-        # self.current_yaw = odom_msg.z
-
-
-        self.states = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
-        self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
-        self.next_trajectories = self.states.copy()
-        self.next_controls = self.controls.copy()
-        ## Path Planner goal
-        self.goal_x = 0.0
-        self.goal_y = 0.0
-        self.goal_yaw = 0.0
-        self.offset = 3.0
-        self.N_IND_SEARCH = 10
-        self.prev_index = 0
-        self.next_index = 0
-        self.pred_index = self.prev_index + self.next_index
-        self.index = 0
-        self.dind = 0
-        self.start_X = [self.feedback_states[0], self.feedback_states[1], self.feedback_states[2]]
-        self.end_X = [self.feedback_states[0], self.feedback_states[1], self.feedback_states[2]]
-
-        self.path, _ = self.calc_planner(self.start_X, self.end_X, self.n_points, self.offset)
-
-        self.path_x = self.path[:, 0]
-        self.path_y = self.path[:, 1]
-        self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
-
-        self.goal_states = np.vstack([self.path_x, self.path_y, self.path_yaw])
-
-
-        self.target_ind = self.calc_index_trajectory(self.current_x, self.current_y, self.goal_states[0, :], self.goal_states[1, :], 1)
-
 
         self.feedback_states = np.array([
                                         self.current_x,
@@ -169,11 +141,11 @@ class NMPCRabbit(Node):
                                     ])
         
         if self.hold_state:
-            self.goal_states = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
+            self.goal_states = np.tile(np.array([self.current_x, self.current_y, self.current_yaw]).reshape(3, 1), self.n_points)
 
         self.next_trajectories[:, 0] = self.feedback_states
 
-    def forward_kinematic(self, u1, u2,u3, u4, theta):
+    def forward_kinematic(self, u1, u2, u3, u4, theta):
 
         rot_mat = np.array([
             [np.cos(theta), np.sin(theta), 0],
@@ -181,10 +153,10 @@ class NMPCRabbit(Node):
             [0, 0, 1]
         ], dtype=np.float64)
 
-        J = np.array([
-            [np.sin(np.pi/4), -np.sin(3*np.pi/4), np.sin(5*np.pi/4), -np.sin(7*np.pi/4)],
-            [np.cos(np.pi/4),  np.cos(3*np.pi/4),-np.cos(5*np.pi/4), -np.cos(7*np.pi/4)],
-            [1/(2*0.23), 1/(2*0.23), 1/(2*0.23), 1/(2*0.23)]
+        J = (self.r/4)*np.array([
+            [-1, 1, -1, 1],
+            [1, 1, -1, -1],
+            [1/(self.lx+self.ly), 1/(self.lx+self.ly), 1/(self.lx+self.ly), 1/(self.lx+self.ly)]
         ], dtype=np.float64)
 
         for_vec = rot_mat.T@J@np.array([u1, u2, u3, u4], dtype=np.float64)
@@ -262,7 +234,7 @@ class NMPCRabbit(Node):
         self.goal_y = path_msg.data[1]
         self.goal_yaw = path_msg.data[2]
 
-        self.start_X = [self.feedback_states[0], self.feedback_states[1], self.feedback_states[2]]
+        self.start_X = [0, 0, 0]
         self.end_X = [self.goal_x, self.goal_y, self.goal_yaw]
 
         self.path, _ = self.calc_planner(self.start_X, self.end_X, self.n_points, self.offset)
@@ -290,7 +262,7 @@ class NMPCRabbit(Node):
             self.args['lbx'][3*(self.N+1):] = -self.speed_up(self.norm_cond)
             self.args['ubx'][3*(self.N+1):] = self.speed_up(self.norm_cond)
     
-        elif np.linalg.norm(self.goal_states[:, -1]-self.feedback_states, 2) < 0.01:
+        elif np.linalg.norm(self.goal_states[:, -1]-self.feedback_states, 2) < 0.001:
             self.norm_cond = 0.0
         #         self.old_nearest_index = 0
         #         self.new_nearest_index = 0
@@ -333,20 +305,19 @@ class NMPCRabbit(Node):
 
         self.target_ind = self.calc_index_trajectory(self.feedback_states[0], self.feedback_states[1], self.goal_states[0, :], self.goal_states[1, :], self.target_ind)
 
-        travel = 2.0
+        travel = 3.0
 
         self.prev_index = self.next_index
 
         for j in range(self.N):
 
-            self.next_trajectories[0, 0] = self.current_x
-            self.next_trajectories[1, 0] = self.current_y
-            self.next_trajectories[2, 0] = self.current_yaw
-
             # vx, vy, vyaw = self.forward_kinematic(self.feedback_controls[0], self.feedback_controls[1],
             #                                       self.feedback_controls[2], self.feedback_controls[3], 0.0)
 
-            vx, vy, vyaw = self.forward_kinematic(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, 0.0)
+            for_vec = self.forward_kinematic(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, 0.0)
+
+            vx = for_vec[0]
+            vy = for_vec[1]
 
             v = np.sqrt(vx**2+vy**2)
 
@@ -365,6 +336,9 @@ class NMPCRabbit(Node):
                 self.next_trajectories[1, j+1] = self.goal_states[1, self.n_points-1]
                 self.next_trajectories[2, j+1] = self.goal_states[2, self.n_points-1]
 
+            # self.next_trajectories[0, j+1] = self.goal_x
+            # self.next_trajectories[1, j+1] = self.goal_y
+            # self.next_trajectories[2, j+1] = self.goal_yaw
 
         self.next_index = dind
         if (self.next_index - self.prev_index) >= 2:

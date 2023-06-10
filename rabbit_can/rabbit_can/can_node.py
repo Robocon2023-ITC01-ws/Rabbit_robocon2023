@@ -12,7 +12,7 @@ class ros_node(Node):
         self.timer = 0.001
         self.vel_timer = 0.01
         self.bus = can.interface.Bus(channel='can0', interface = 'socketcan', bitrate = 1000000)
-        self.command_sub = self.create_subscription(Twist, 'cmd_vel', self.command_callback, 100)
+        # self.command_sub = self.create_subscription(Twist, 'cmd_vel', self.command_callback, 100)
         self.can_timer = self.create_timer(self.timer, self.can_callback)
         self.rotary_publisher = self.create_publisher(UInt16MultiArray, 'external_rotary', 10)
         self.tick_publisher = self.create_publisher(UInt16MultiArray, 'wheel_tick', 10)
@@ -65,12 +65,12 @@ class ros_node(Node):
 
         self.TxData[0] = ((V1 & 0xFF00) >> 8)
         self.TxData[1] = (V1 & 0x00FF)
-        self.TxData[2] = ((V4 & 0xFF00) >> 8)
-        self.TxData[3] = (V4 & 0x00FF)
+        self.TxData[2] = ((V2 & 0xFF00) >> 8)
+        self.TxData[3] = (V2 & 0x00FF)
         self.TxData[4] = ((V3 & 0xFF00) >> 8)
         self.TxData[5] = (V3 & 0x00FF)
-        self.TxData[6] = ((V2 & 0xFF00) >> 8)
-        self.TxData[7] = (V2 & 0x00FF)
+        self.TxData[6] = ((V4 & 0xFF00) >> 8)
+        self.TxData[7] = (V4 & 0x00FF)
 
 
     def command_callback(self, twist_msg):
@@ -84,7 +84,8 @@ class ros_node(Node):
 
         # print(vx, vy, omega)
 
-        v1, v2, v3, v4 = self.kinematic.omni_inverse_kinematic(vx, vy, vyaw, 0.0)
+        v1, v2, v3, v4 = self.kinematic.meca_inverse_kinematic(vx, vy, vyaw, 0.0)
+
 
         # print(v1, v2, v3, v4)
 
@@ -95,12 +96,12 @@ class ros_node(Node):
 
         self.TxData[0] = ((V1 & 0xFF00) >> 8)
         self.TxData[1] = (V1 & 0x00FF)
-        self.TxData[2] = ((V4 & 0xFF00) >> 8)
-        self.TxData[3] = (V4 & 0x00FF)
+        self.TxData[2] = ((V2 & 0xFF00) >> 8)
+        self.TxData[3] = (V2 & 0x00FF)
         self.TxData[4] = ((V3 & 0xFF00) >> 8)
         self.TxData[5] = (V3 & 0x00FF)
-        self.TxData[6] = ((V2 & 0xFF00) >> 8)
-        self.TxData[7] = (V2 & 0x00FF)
+        self.TxData[6] = ((V4 & 0xFF00) >> 8)
+        self.TxData[7] = (V4 & 0x00FF)
 
     def pick_up_callback(self, pick_up_msg):
         self.pick_up_command = pick_up_msg.data
@@ -153,11 +154,11 @@ class ros_node(Node):
                 if (can_msg != None):
                     if can_msg.arbitration_id == 0x155:
                         self.tick_data[0] = (can_msg.data[0] << 8) + can_msg.data[1]
-                        self.tick_data[3] = (can_msg.data[2] << 8) + can_msg.data[3]
+                        self.tick_data[1] = (can_msg.data[2] << 8) + can_msg.data[3]
 
                     elif can_msg.arbitration_id == 0x140:
                         self.tick_data[2] = (can_msg.data[0] << 8) + can_msg.data[1]
-                        self.tick_data[1] = (can_msg.data[2] << 8) + can_msg.data[3]
+                        self.tick_data[3] = (can_msg.data[2] << 8) + can_msg.data[3]
 
                     elif can_msg.arbitration_id == 0x333:
                         

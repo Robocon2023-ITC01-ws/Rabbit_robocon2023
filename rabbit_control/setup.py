@@ -32,6 +32,8 @@ setup(
             'nmpc_params = rabbit_control.nmpc_params:main',
             'nmpc_params2 = rabbit_control.nmpc_params_v2:main',
             'nmpc_params3 = rabbit_control.nmpc_params_v3:main',
+            'nmpc_meca = rabbit_control.nmpc_meca:main',
+            'nmpc_meca_v2 = rabbit_control.nmpc_meca_v2:main',
             'test_imu = rabbit_control.test_imu:main',
         ],
     },

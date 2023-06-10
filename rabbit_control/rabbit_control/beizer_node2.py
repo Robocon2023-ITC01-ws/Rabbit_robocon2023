@@ -4,7 +4,7 @@ import numpy as np
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, Bool, String
 from sensor_msgs.msg import Imu, Joy
-from rabbit_control.rabbit_omni import RabbitModel
+from rabbit_control.rabbit_meca import RabbitModel
 from rabbit_control.bezier_path import calc_bezier_path, calc_4points_bezier_path
 from tf_transformations import euler_from_quaternion
 
@@ -20,7 +20,7 @@ class TrajectoryGenerator(Node):
         self.current_yaw = 0.0
 
         self.current_states = np.array([self.current_x, self.current_y, self.current_yaw])
-        self.startX = [self.current_x, self.current_y, self.current_yaw]
+        self.startX = [0.0, 0.0, 0.0]
 
         self.n_points = 200
 
@@ -50,11 +50,13 @@ class TrajectoryGenerator(Node):
 
         self.odom_subscriber = self.create_subscription(Float32MultiArray, 'state_est', self.odom_callback, 10)
         self.imu_subscriber = self.create_subscription(Imu, 'imu/data2', self.imu_callback, 10)
-        self.goal_subscriber = self.create_subscription(Joy, 'joy', self.goal_callback, 10)
+        self.goal_subscriber = self.create_subscription(Joy, 'joy', self.joy_callback, 10)
         self.command_goal = self.create_subscription(String, "controller_state", self.command_callback, 10)
 
         self.path_publisher = self.create_publisher(Float32MultiArray, 'beizer_path', 10)
         self.input_subscriber = self.create_subscription(Float32MultiArray, 'input_controls', self.input_callback, 10)
+        self.goal_cmd = self.create_subscription(String, 'cmd_goal', self.goal_cmd_callback, 10)
+
 
         self.path_timer = self.create_timer(1/10, self.path_callback)
 
@@ -81,7 +83,6 @@ class TrajectoryGenerator(Node):
         self.pre_ind3 = 0
         self.t_ind3 = 2
         self.ind3 = 0
-
 
     def command_callback(self, msg):
 
@@ -150,27 +151,29 @@ class TrajectoryGenerator(Node):
 
 
 
-    def goal_callback(self, joy):
+    def joy_callback(self, joy):
 
         self.axes_list = joy.axes
         self.button_list = joy.buttons
 
-        self.startX = [self.current_x, self.current_y, self.current_yaw]
-        self.endX = [3.0, 0.0, 0.0]
+    def goal_cmd_callback(self, msg):
 
-        if self.button_list[3] == 1:
-            self.goal_cond = True
-
-        elif self.button_list[3] != 1:
-            self.goal_cond = False
-            print('Still in the current states')
+        self.goal_msg = msg.data
 
     
     def path_callback(self):
         path_msg = Float32MultiArray()
 
         if self.goal_msg == "goal1":
-            self.goal_states = np.loadtxt('/home/kenotic/ros2ocp_ws/src/ocp_robocon2023/ocp_robocon2023/library/path7.csv', delimiter=',', dtype=np.float32)
+
+            ### RESET GOAL2 ###
+            self.p_ind2 = 0
+            self.c_ind2 = 0
+            self.pre_ind2 = 0
+            self.t_ind2 = 2
+            self.ind2 = 0
+
+            self.goal_states = np.loadtxt('/home/kenotic/ros2ocp_ws/src/rabbit_control/rabbit_control/path1.csv', delimiter=',', dtype=np.float32)
             
             self.ind1 = self.calc_index_trajectory(self.current_x, self.current_y,
                                                           self.goal_states[0], self.goal_states[1],
@@ -181,8 +184,10 @@ class TrajectoryGenerator(Node):
 
             for j in range(self.N):
 
-                vx, vy, vyaw = self.rabbit_model.forward_kinematic(self.opt_u[0], self.opt_u[1],
-                                                                   self.opt_u[2], self.opt_u[3], 0.0, "numpy")
+                for_vec = self.rabbit_model.forward_kinematic(self.opt_u[0], self.opt_u[1],
+                                                              self.opt_u[2], self.opt_u[3], 0.0, "numpy")
+                vx = for_vec[0]
+                vy = for_vec[1]
                 
                 v = np.sqrt(vx**2+vy**2)
 
@@ -200,6 +205,8 @@ class TrajectoryGenerator(Node):
                     path_msg.data = [float(self.goal_states[0, self.goal_states.shape[1]-1]),
                                      float(self.goal_states[1, self.goal_states.shape[1]-1]),
                                      float(self.goal_states[2, self.goal_states.shape[1]-1])]
+                    
+                self.path_publisher.publish(path_msg)
             
             self.c_ind1 = dind
             if (self.c_ind1 - self.p_ind1) >= 2:
@@ -208,9 +215,19 @@ class TrajectoryGenerator(Node):
             if self.pre_ind1 >= self.goal_states.shape[1]:
                 self.pre_ind1 = self.goal_states.shape[1]-1
 
+            print("Goal1")
+
                     
         elif self.goal_msg == "goal2":
-            self.goal_states = np.loadtxt('/home/kenotic/ros2ocp_ws/src/ocp_robocon2023/ocp_robocon2023/library/path7.csv', delimiter=',', dtype=np.float32)
+
+            #### RESET GOAL1 ####
+            self.p_ind1 = 0
+            self.c_ind1 = 0
+            self.pre_ind1 = 0
+            self.t_ind1 = 2
+            self.ind1 = 0
+
+            self.goal_states = np.loadtxt('/home/kenotic/ros2ocp_ws/src/rabbit_control/rabbit_control/path2.csv', delimiter=',', dtype=np.float32)
             
             self.ind2 = self.calc_index_trajectory(self.current_x, self.current_y,
                                                    self.goal_states[0], self.goal_states[1],
@@ -221,9 +238,11 @@ class TrajectoryGenerator(Node):
 
             for j in range(self.N):
 
-                vx, vy, vyaw = self.rabbit_model.forward_kinematic(self.opt_u[0], self.opt_u[1],
-                                                                   self.opt_u[2], self.opt_u[3], 0.0, "numpy")
-                
+                for_vec = self.rabbit_model.forward_kinematic(self.opt_u[0], self.opt_u[1],
+                                                              self.opt_u[2], self.opt_u[3], 0.0, "numpy")
+                vx = for_vec[0]
+                vy = for_vec[1]
+
                 v = np.sqrt(vx**2+vy**2)
 
                 travel += abs(v) * self.dt 
@@ -241,12 +260,9 @@ class TrajectoryGenerator(Node):
                                      float(self.goal_states[1, self.goal_states.shape[1]-1]),
                                      float(self.goal_states[2, self.goal_states.shape[1]-1])]
 
+                self.path_publisher.publish(path_msg)
 
-
-        path_msg.data = [float(self.goal_states[0, self.index]), float(self.goal_states[1, self.index]), float(self.goal_states[2, self.index])]
-        self.path_publisher.publish(path_msg)
-
-        print(self.index)
+            print("Goal2")
 
 
 

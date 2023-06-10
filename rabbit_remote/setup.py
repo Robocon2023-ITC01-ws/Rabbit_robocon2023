@@ -27,6 +27,7 @@ setup(
         'console_scripts': [
             'ps3_node = rabbit_remote.ps3_control:main',
             'ps3_nrf = rabbit_remote.ps3_nrf:main',
+            'ps4_node = rabbit_remote.ps4_control:main',
         ],
     },
 )

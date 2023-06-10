@@ -43,6 +43,11 @@ class RotaryNode(Node):
         self.curr_wheel_tick = np.zeros(4)
         self.diff_wheel_tick = np.zeros(4)
 
+        self.prev_yaw = 0.0
+        self.curr_yaw = 0.0
+        self.dyaw = 0.0
+        self.hist_yaw = [0]
+
         self.wheel_init = True
 
         self.kinematic = kinematic()
@@ -56,21 +61,27 @@ class RotaryNode(Node):
         self.input_publisher = self.create_publisher(Float32MultiArray, 'feedback_controls', 10)
         self.input_timer = self.create_timer(0.05, self.input_callback)
 
-        # self.rotary_timer = self.create_timer(0.0333, self.rotary_calculation)
+        # self.rotary_timer = self.create_timer(0.0333, self.rotary_cb_pub)
         # self.odom_timer = self.create_timer(0.02, self.odom_callback)
 
     def wheel_model(self, u1, u2, u3, u4, theta):
 
-        w1 = u1*2*np.pi/self.wheel_ppr
-        w2 = u2*2*np.pi/self.wheel_ppr
-        w3 = u3*2*np.pi/self.wheel_ppr
-        w4 = u4*2*np.pi/self.wheel_ppr
+        w1 = u1 * 2 * np.pi/self.wheel_ppr
+        w2 = u2 * 2 * np.pi/self.wheel_ppr
+        w3 = u3 * 2 * np.pi/self.wheel_ppr
+        w4 = u4 * 2 * np.pi/self.wheel_ppr
 
         self.input_cons = [w1, w2, w3, w4]
 
-        for_vec = self.kinematic.omni_forward_kinematic(w1, w2, w3, w4, theta)
+        for_vec = self.kinematic.meca_forward_kinematic(w1, w2, w3, w4, theta)
 
         return for_vec
+    
+    def calc_dyaw(self, yaw):
+        for i in range(len(yaw)-1):
+            dyaw = yaw[i+1] - yaw[i]
+
+        return dyaw
     
     def input_callback(self):
         input_msg = Float32MultiArray()
@@ -91,6 +102,13 @@ class RotaryNode(Node):
         roll, pitch , yaw = euler_from_quaternion(orient_list)
 
         self.yaw = yaw
+        self.curr_yaw = yaw
+
+        self.dyaw = self.curr_yaw - self.prev_yaw
+
+        self.prev_yaw = self.curr_yaw
+
+        self.hist_yaw.append(yaw)
 
     def wheel_callback(self, tick_msg):
         odom_msg = Float32MultiArray()
@@ -141,7 +159,7 @@ class RotaryNode(Node):
 
         for_vec = rot_mat@J@np.array([u1, u2], dtype=np.float64)
 
-        for_vec[2] = for_vec[2] - self.ly*self.curr_wheel[2]
+        for_vec[0] = for_vec[0] - self.ly*self.dyaw
 
         # for_vec = (self.r)*np.array([
         #     [u1*np.cos(theta) - u2*np.sin(theta)],
@@ -162,7 +180,7 @@ class RotaryNode(Node):
             self.first_init = False
         else:
             self.curr_tick = np.array([tick_msg.data[0], tick_msg.data[1]])
-            self.diff_rotary = self.prev_tick - self.curr_tick
+            self.diff_rotary = self.curr_tick - self.prev_tick
             for i in range(2):
                 if (self.diff_rotary[i] > 32768):
                     self.diff_rotary[i] = self.diff_rotary[i] - 65535
@@ -182,12 +200,6 @@ class RotaryNode(Node):
 
         # print(self.rotary_model(self.diff_rotary[0], self.diff_rotary[1], 0.0))
 
-    def odom_callback(self):
-
-        odom_msg = Float32MultiArray()
-        odom_msg.data = [0.0, 0.0, 0.0]
-
-        self.odom_publisher.publish(odom_msg)
 
 
 def main(args=None):

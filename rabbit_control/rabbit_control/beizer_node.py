@@ -81,10 +81,10 @@ class TrajectoryGenerator(Node):
             [0, 0, 1]
         ], dtype=np.float64)
 
-        J = np.array([
-            [np.sin(np.pi/4), -np.sin(3*np.pi/4), np.sin(5*np.pi/4), -np.sin(7*np.pi/4)],
-            [np.cos(np.pi/4), -np.cos(3*np.pi/4), np.cos(5*np.pi/4), -np.cos(7*np.pi/4)],
-            [1/(2*0.23), 1/(2*0.23), 1/(2*0.23), 1/(2*0.23)]
+        J = (self.r/4)*np.array([
+            [-1, 1, -1, 1],
+            [1, 1, -1, -1],
+            [1/(self.lx+self.ly), 1/(self.lx+self.ly), 1/(self.lx+self.ly), 1/(self.lx+self.ly)]
         ], dtype=np.float64)
 
         for_vec = rot_mat.T@J@np.array([u1, u2, u3, u4], dtype=np.float64)
