@@ -23,6 +23,8 @@ setup(
         'console_scripts': [
             'shooter = rabbit_shooter.shooter:main',
             'command = rabbit_shooter.shoot_command:main',
+            'param = rabbit_shooter.param_shooter:main',
+            'test = rabbit_shooter.shooter_test:main',
         ],
     },
 )
