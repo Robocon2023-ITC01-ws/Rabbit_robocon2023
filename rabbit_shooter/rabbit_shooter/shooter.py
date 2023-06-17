@@ -2,8 +2,8 @@ import rclpy
 import numpy as np
 from rclpy.node import Node
 
-from std_msgs.msg import Int16 # laser: subscribe the data from laser
-# from std_msgs.msg import Int32 # motor: publish the data to the motor 
+from std_msgs.msg import UInt16 # laser: subscribe the data from laser
+from std_msgs.msg import UInt32 # motor: publish the data to the motor 
 from std_msgs.msg import Int8 # button: to control shoot or not shoot
 from std_msgs.msg import Int32MultiArray, Int32, Float32
 from time import sleep
@@ -14,10 +14,10 @@ class ShooterNode(Node):
     def __init__(self):
         super().__init__('shooter_node')
 
-        self.laser_sub = self.create_subscription(Int16, 'laser', self.laser_callback, 10)
+        self.laser_sub = self.create_subscription(UInt16, 'laser', self.laser_callback, 10)
         
         self.button_sub = self.create_subscription(Int8, "shooter_command", self.button_callback, 10)
-        self.shooter_pub = self.create_publisher(Int32, 'shooter', 10)
+        self.shooter_pub = self.create_publisher(UInt32, 'shooter', 10)
 
         self.button_command = 0
         self.laser_data = 0
@@ -28,21 +28,15 @@ class ShooterNode(Node):
     def button_callback(self, button_msg):
         button_command = int(button_msg.data)
         while(button_command == 1):
-            self.laser_sub = self.create_subscription(Int16, 'laser', self.laser_callback, 10)
-            distance = (5.753 - 0.293)/(3541 - 14)*(self.laser_data - 14) + 0.293
+            self.laser_sub = self.create_subscription(UInt16, 'laser', self.laser_callback, 10)
+            distance = (4.439 - 0.765)/(3495 - 6)*(self.laser_data - 6) + 0.765
             print(distance)
-            self.rps = int(shooter(distance).shooter())
+            self.rps = shooter(distance).shooter()
+            print(self.rps)
             if(self.rps == 7433):
                 self.rps = 0 
-            shooter_msg = Int32()
-            shooter_msg.data = -self.rps
-            self.shooter_pub.publish(shooter_msg)
-            print(self.rps)
-            sleep(1.5)
-            shooter_msg.data = self.rps
-            self.shooter_pub.publish(shooter_msg)
-            sleep(1.5)
-            shooter_msg.data = 0
+            shooter_msg = UInt32()
+            shooter_msg.data = int(self.rps)
             self.shooter_pub.publish(shooter_msg)
             self.rps = 0
             break

@@ -30,7 +30,7 @@ class shooter():
         v_to_roller = rps1
         if (v_to_roller > 1500):
             v_in = 1500
-        v_o = (int)(self.map(v_to_roller, 0, 1500, 0, 65535))
+        v_o = int(self.map(v_to_roller, 0, 1500, 0, 65535))
         return v_o
     
     def velocity(self, distance):
@@ -44,7 +44,7 @@ class shooter():
             h = -1.0 + 0.42
         elif(distance >=1.4-0.15 and distance <=1.4+0.15):
             h = -1.7 + 0.42
-        v = np.sqrt(9.8*self.distance**2/(self.distance*np.tan(theta) - h))
+        v = np.sqrt(9.8*distance**2/(distance*np.tan(theta) - h))
         return v
 
 
@@ -147,7 +147,7 @@ class shooter():
         self.distance = X_in
         v = self.velocity(X_in)
         
-        rps = self.velocity_to_can(v)
+        rps = int(self.velocity_to_can(v))
         return rps
 
 

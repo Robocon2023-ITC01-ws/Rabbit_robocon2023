@@ -4,7 +4,7 @@ import can
 from geometry_msgs.msg import Twist, Vector3
 import numpy as np
 from model_kinematic.kinematic import *
-from std_msgs.msg import Float32MultiArray, UInt16MultiArray, Int8, Int16, Int32
+from std_msgs.msg import Float32MultiArray, UInt16MultiArray, Int8, Int16, Int32 ,UInt16, UInt32
 
 class ros_node(Node):
     def __init__(self):
@@ -12,7 +12,7 @@ class ros_node(Node):
         self.timer = 0.001
         self.vel_timer = 0.01
         self.bus = can.interface.Bus(channel='can0', interface = 'socketcan', bitrate = 1000000)
-        # self.command_sub = self.create_subscription(Twist, 'cmd_vel', self.command_callback, 100)
+        self.command_sub = self.create_subscription(Twist, 'cmd_vel', self.command_callback, 100)
         self.can_timer = self.create_timer(self.timer, self.can_callback)
         self.rotary_publisher = self.create_publisher(UInt16MultiArray, 'external_rotary', 10)
         self.tick_publisher = self.create_publisher(UInt16MultiArray, 'wheel_tick', 10)
@@ -39,8 +39,8 @@ class ros_node(Node):
         self.rotary_data = [0, 0]
 
         # laser to shooter
-        self.laser_pub = self.create_publisher(Int16, 'laser', 10)
-        self.shooter_sub = self.create_subscription(Int32, 'shooter', self.shooter_callback, 10)
+        self.laser_pub = self.create_publisher(UInt16, 'laser', 10)
+        self.shooter_sub = self.create_subscription(UInt32, 'shooter', self.shooter_callback, 10)
         self.TxData1 = [0, 0, 0, 0]
         self.TxData2 = [0]
 
@@ -65,12 +65,12 @@ class ros_node(Node):
 
         self.TxData[0] = ((V1 & 0xFF00) >> 8)
         self.TxData[1] = (V1 & 0x00FF)
-        self.TxData[2] = ((V2 & 0xFF00) >> 8)
-        self.TxData[3] = (V2 & 0x00FF)
+        self.TxData[2] = ((V4 & 0xFF00) >> 8)
+        self.TxData[3] = (V4 & 0x00FF)
         self.TxData[4] = ((V3 & 0xFF00) >> 8)
         self.TxData[5] = (V3 & 0x00FF)
-        self.TxData[6] = ((V4 & 0xFF00) >> 8)
-        self.TxData[7] = (V4 & 0x00FF)
+        self.TxData[6] = ((V2 & 0xFF00) >> 8)
+        self.TxData[7] = (V2 & 0x00FF)
 
 
     def command_callback(self, twist_msg):
@@ -84,8 +84,7 @@ class ros_node(Node):
 
         # print(vx, vy, omega)
 
-        v1, v2, v3, v4 = self.kinematic.meca_inverse_kinematic(vx, vy, vyaw, 0.0)
-
+        v1, v2, v3, v4 = self.kinematic.omni_inverse_kinematic(vx, vy, vyaw, 0.0)
 
         # print(v1, v2, v3, v4)
 
@@ -96,12 +95,12 @@ class ros_node(Node):
 
         self.TxData[0] = ((V1 & 0xFF00) >> 8)
         self.TxData[1] = (V1 & 0x00FF)
-        self.TxData[2] = ((V2 & 0xFF00) >> 8)
-        self.TxData[3] = (V2 & 0x00FF)
+        self.TxData[2] = ((V4 & 0xFF00) >> 8)
+        self.TxData[3] = (V4 & 0x00FF)
         self.TxData[4] = ((V3 & 0xFF00) >> 8)
         self.TxData[5] = (V3 & 0x00FF)
-        self.TxData[6] = ((V4 & 0xFF00) >> 8)
-        self.TxData[7] = (V4 & 0x00FF)
+        self.TxData[6] = ((V2 & 0xFF00) >> 8)
+        self.TxData[7] = (V2 & 0x00FF)
 
     def pick_up_callback(self, pick_up_msg):
         self.pick_up_command = pick_up_msg.data
@@ -110,29 +109,18 @@ class ros_node(Node):
         self.pub_pick = 1
 
     def shooter_callback(self, shooter_msg):
-        if (shooter_msg.data > 10):
-            self.TxData1[2] = 1
-     
-            shooter_speed = shooter_msg.data
-        elif (shooter_msg.data < -10):
-            self.TxData1[2] = 0
-            
-            shooter_speed = -1*shooter_msg.data
-        else :
-            self.TxData1[2] = 0
-            shooter_speed = 0
-        
+        shooter_speed = shooter_msg.data
         # self.TxData1[3] = self.pick_up_command
         print(self.shooter_data)
         self.TxData1[0] = ((shooter_speed & 0xFF00) >> 8)
         self.TxData1[1] = (shooter_speed & 0x00FF)
         
-        self.shoot_msg = can.Message(arbitration_id=0x222, data= self.TxData1, dlc= 4, is_extended_id= False)
+        self.shoot_msg = can.Message(arbitration_id=0x222, data= self.TxData1, dlc= 2, is_extended_id= False)
         self.pub_shooter_speed = 1
 
     def can_callback(self):
         msg = can.Message(arbitration_id=0x111, is_extended_id=False, data=self.TxData)
-        laser_msg = Int16()
+        laser_msg = UInt16()
         try:
             if (self.pub_shooter_speed):
                 self.pub_shooter_speed = 0
@@ -154,11 +142,11 @@ class ros_node(Node):
                 if (can_msg != None):
                     if can_msg.arbitration_id == 0x155:
                         self.tick_data[0] = (can_msg.data[0] << 8) + can_msg.data[1]
-                        self.tick_data[1] = (can_msg.data[2] << 8) + can_msg.data[3]
+                        self.tick_data[3] = (can_msg.data[2] << 8) + can_msg.data[3]
 
                     elif can_msg.arbitration_id == 0x140:
                         self.tick_data[2] = (can_msg.data[0] << 8) + can_msg.data[1]
-                        self.tick_data[3] = (can_msg.data[2] << 8) + can_msg.data[3]
+                        self.tick_data[1] = (can_msg.data[2] << 8) + can_msg.data[3]
 
                     elif can_msg.arbitration_id == 0x333:
                         

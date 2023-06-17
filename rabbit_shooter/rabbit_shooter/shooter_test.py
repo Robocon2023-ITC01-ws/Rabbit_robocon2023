@@ -4,11 +4,11 @@ from rclpy.node import Node
 import yaml
 ## This node is created to publish the data to store in the yaml file in order to fixed the parameter for the future use
 ## In which the parameter will be come from the testing file and used the data from yaml file to use in the automatic shooter
-from std_msgs.msg import Int16 # laser: subscribe the data from laser
+from std_msgs.msg import UInt16 # laser: subscribe the data from laser
 from std_msgs.msg import UInt8 # motor: publish the data to the motor 
 from std_msgs.msg import Int8 # button: to control shoot or not shoot
 from std_msgs.msg import Float32 # Parameter publisher
-from std_msgs.msg import Float32MultiArray, Int32
+from std_msgs.msg import Float32MultiArray, UInt32
 
 from time import sleep
 
@@ -18,10 +18,10 @@ class ShooterNode(Node):
     def __init__(self):
         super().__init__('shooter_node')
 
-        self.laser_sub = self.create_subscription(Int16, 'laser', self.laser_callback, 10)
+        self.laser_sub = self.create_subscription(UInt16, 'laser', self.laser_callback, 10)
         self.button_sub = self.create_subscription(Int8, "shooter_command", self.button_callback, 10)
         self.adjust_sub = self.create_subscription(Float32, "adjust", self.adjust_callback,10)
-        self.shooter_pub = self.create_publisher(Int32, 'shooter', 10)
+        self.shooter_pub = self.create_publisher(UInt32, 'shooter', 10)
         self.param_pub = self.create_publisher(Float32MultiArray, 'stored', 10)
         self.shoot_pub = self.create_publisher(UInt8, 'process_state', 10)
 
@@ -65,17 +65,9 @@ class ShooterNode(Node):
                                     ]
             #param_msg.data = self.a
             self.param_pub.publish(param_msg)
-            shooter_msg = Int32()
-            shooter_msg.data = -self.rps
-            self.shooter_pub.publish(shooter_msg)
-            print(self.rps)
-            sleep(1.5)
+            shooter_msg = UInt32()
             shooter_msg.data = self.rps
             self.shooter_pub.publish(shooter_msg)
-            sleep(1.5)
-            shooter_msg.data = 0
-            self.shooter_pub.publish(shooter_msg)
-            ## here
             shoot_msg = UInt8()
             shoot_msg.data = 2
             self.shoot_pub.publish(shoot_msg)
