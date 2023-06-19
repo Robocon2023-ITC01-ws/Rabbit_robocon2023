@@ -52,98 +52,98 @@ class shooter():
         if (X_in>=0.9 and X_in<1):
             a[0] = self.map(self.adjust, 1,-1,3,3.4)
             X_in = X_in*a[0]
-        elif(X_in>=1 and X_in <=1.05):
+        elif(X_in>=1 and X_in <=1.1):
             a[1]= self.map(self.adjust, 1, -1, 3,3.42)
             X_in = X_in*a[1]
-        elif(X_in>1.05 and X_in <=1.1):
+        elif(X_in>1.1 and X_in <=1.3):
             a[2] = self.map(self.adjust, 1, -1, 3,3.43)
             X_in = X_in*a[2]
-        elif (X_in>1.1 and X_in<=1.2):
+        elif (X_in>1.3 and X_in<=1.4):
             a[3] = self.map(self.adjust, 1, -1, 3, 3.45)
             X_in = X_in*a[3]
-        elif(X_in>1.2 and X_in<=1.3):
+        elif(X_in>1.4 and X_in<=1.5):
             a[4] = self.map(self.adjust, 1, -1, 3,3.5)
             X_in = X_in*a[4]
-        elif(X_in>1.3 and X_in<=1.4):
+        elif(X_in>1.5 and X_in<=1.6):
             a[5]= self.map(self.adjust, 1, -1, 3,3.5)
             X_in = X_in*a[5]
-        elif(X_in> 1.4 and X_in<=1.5):
+        elif(X_in> 1.6 and X_in<=1.7):
             a[6] =self.map(self.adjust, 1, -1, 3, 10)
             X_in = self.map(X_in, 1.5, 0.5, a[6], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 3.5, 1.5)
-        elif(X_in>1.5 and X_in <= 1.7):
+        elif(X_in>1.7 and X_in <= 1.8):
             a[7] =self.map(self.adjust, 1, -1, 3, 11)
             X_in = self.map(X_in, 1.5, 0.5, a[7], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 2.95, 1.5)
-        elif(X_in>1.7 and X_in<=1.8):
+        elif(X_in>1.8 and X_in<=1.9):
             a[8] = self.map(self.adjust, 1, -1, 3, 12)
             X_in = self.map(X_in, 1.5, 0.5, a[8], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 2.94, 1.5)
-        elif(X_in>1.8 and X_in <=2):
+        elif(X_in>1.9 and X_in <=2.0):
             a[9] = self.map(self.adjust, 1, -1, 3, 12)
             X_in = self.map(X_in, 1.5, 0.5, a[9], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 3.12, 1.5)
-        elif(X_in>2 and X_in<2.2):
+        elif(X_in>2.0 and X_in<2.1):
             a[10] = self.map(self.adjust, 1, -1, 3, 12)
             X_in = self.map(X_in, 1.5, 0.5, a[10], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 3.1, 1.5)
-        elif(X_in>=2.2 and X_in<=2.3):
+        elif(X_in>=2.1 and X_in<=2.2):
             a[11] = self.map(self.adjust, 1, -1, 3, 3.15)
             X_in = self.map(X_in, 1.5, 0.5, a[11], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 3.09, 1.5)
-        elif(X_in>2.3 and X_in<=2.5):
+        elif(X_in>2.2 and X_in<=2.3):
             a[12] = self.map(self.adjust, 1, -1, 3.2, 3)
             X_in = self.map(X_in, 1.5, 0.5, a[12], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 3.7, 1.5)
-        elif(X_in>2.5 and X_in<=2.6):
+        elif(X_in>2.3 and X_in<=2.4):
             a[13] = self.map(self.adjust, 1, -1, 3.6, 3.75)
             X_in = self.map(X_in, 1.5, 0.5, a[13], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 3.73, 1.5)    
-        elif(X_in>2.6 and X_in<=2.7):
+        elif(X_in>2.4 and X_in<=2.5):
             a[14] = self.map(self.adjust, 1, -1, 3.3, 3.4)
             X_in = self.map(X_in, 1.5, 0.5, a[14], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 2.8, 1.5)
-        elif(X_in>2.7 and X_in<=2.8):
+        elif(X_in>2.5 and X_in<=2.6):
             a[15] = self.map(self.adjust, 1, -1, 3.8, 3.9)
             X_in = self.map(X_in, 1.5, 0.5, a[15], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 2.7, 1.5) 
-        elif(X_in>2.9 and X_in<=3.2):
+        elif(X_in>2.6 and X_in<=2.7):
             a[16] = self.map(self.adjust, 1, -1, 3.5, 4)
             X_in = self.map(X_in, 1.5, 0.5, a[16], 1.5)
             
             #X_in = self.map(X_in, 1.5, 0.5, 2.65, 1.5) 
-        elif(X_in>3.2 and X_in<=3.5):
+        elif(X_in>2.7 and X_in<=2.8):
             a[17] = self.map(self.adjust, 1, -1, 3.5, 4)
             X_in = self.map(X_in, 1.5, 0.5, a[17], 1.5)
             #X_in = self.map(X_in, 1.5, 0.5, 2.65, 1.5)
-        elif(X_in>3.5 and X_in<=3.8):
+        elif(X_in>2.8 and X_in<=2.9):
             a[18] = self.map(self.adjust, 1, -1, 3.87, 3.92)
             X_in = self.map(X_in, 1.5, 0.5, a[18], 1.5)
             
 
             #X_in = self.map(X_in, 2.25, 0.5, 3.9, 1.5)
-        elif(X_in>3.8 and X_in<=4.1):
+        elif(X_in>2.9 and X_in<=3.0):
             a[17] = self.map(self.adjust, 1, -1, 4, 4.1)
             X_in = self.map(X_in, 1.5, 0.5, a[17], 1.5)
 
             #X_in = self.map(X_in, 2.35, 0.5, 4.05, 1.5)
-        elif(X_in>4.1 and X_in<=4.4):
+        elif(X_in>3.1 and X_in<=3.2):
             a[20] = self.map(self.adjust, 1, -1, 3.8, 3.9)
             X_in = self.map(X_in, 1.5, 0.5, a[20], 1.5)
 
             #X_in = self.map(X_in, 2.46, 0.5, 4.15, 1.5)
-        elif(X_in>=5.5 and X_in<5.6):
+        elif(X_in>=3.2 and X_in<3.3):
             a[21] = self.map(self.adjust, 1, -1, 3.3, 3.7)
             X_in = self.map(X_in, 1.5, 0.5, a[21], 1.5)
 
             #X_in = self.map(X_in,1.5, 0.5,3.5, 1.5)
-        elif(X_in>0.7 and X_in<0.9):
+        elif(X_in>0.8 and X_in<0.9):
             a[22] = self.map(self.adjust, 1,-1,3.5,3.6)
             X_in = X_in*a[22]
             
 
             #X_in = 3.4*X_in 
-        elif(X_in>0.6 and X_in<=0.7):
+        elif(X_in>0.7 and X_in<=0.8):
             a[23] = self.map(self.adjust, 1,-1,3.88,3.92)
             X_in = X_in*a[23]
 
