@@ -18,6 +18,11 @@ import getpass
 username = getpass.getuser()
 
 
+def write_yaml_to_file(py_obj,filename):
+    with open(f'{filename}', 'w',) as f :
+        yaml.dump(py_obj,f,sort_keys=True) 
+    print('Written to file successfully')
+
 def read_and_modify_one_block_of_yaml_data(filename, key, value):
     with open(f'{filename}', 'r') as f:
         data = yaml.safe_load(f)
@@ -25,6 +30,7 @@ def read_and_modify_one_block_of_yaml_data(filename, key, value):
         print(data) 
     with open(f'{filename}', 'w') as file:
         yaml.dump(data,file,sort_keys=False)
+    print('done!')
     print('done!')
     
 
@@ -39,6 +45,8 @@ class ShooterNode(Node):
         self.shooter_pub = self.create_publisher(UInt32, 'shooter', 10)
         self.save_sub = self.create_subscription(Int8, "data_save", self.save_callback, 10)
         self.file = f'/home/{username}/rabbit_ws/src/rabbit_shooter/config/data.yaml'
+        self.file1 = f'/home/{username}/rabbit_ws/src/rabbit_shooter/config/data1.yaml'
+        self.file2= f'/home/{username}/rabbit_ws/src/rabbit_shooter/config/data2.yaml'
 
         self.button_command = 0
         self.laser_data = 0
@@ -51,6 +59,8 @@ class ShooterNode(Node):
         self.count = 0
         self.save = 0
         self.speed = 0
+        self.push_save = 0
+        self.saved = 0
     
     
     def adjust_left_callback(self, adjust_msg):
@@ -67,37 +77,70 @@ class ShooterNode(Node):
 
     def button_callback(self, button_msg):
         button_command = int(button_msg.data)
-        if(button_command == 1):
+        if(button_command == 1 ):
             self.laser_sub = self.create_subscription(UInt16, 'laser', self.laser_callback, 10)
-            self.distance = (4.439 - 0.765)/(3495 - 6)*(self.laser_data - 6) + 0.765
-            
-            self.adjust = self.distance + (self.adjust_right - self.adjust_left)
+            self.distance = (5.499 - 0.241)/(3516 - 9)*(self.laser_data - 9) + 0.241
+            left = self.map(self.adjust_left, 1, -1, 0 ,1)
+            right = self.map(self.adjust_right, 1, -1, 0, 1)
+            self.adjust = self.distance + (right - left)
             if (self.adjust <0):
                 self.adjust = 0
-            self.speed = self.map(self.adjust, 0, 1, 300, 1500)
-            if(self.speed >= 1500):
-                self.speed = 1500
-            self.rps = int(self.map(self.speed, 0, 1500, 0, 65535))
+            self.speed = self.speed_shooter(self.adjust)
+            self.rps = self.map(self.speed, 0, 1500, 0, 65535)
             
             
             
             shooter_msg = UInt32()
-            shooter_msg.data = self.rps
+            shooter_msg.data = int(self.rps)
             self.shooter_pub.publish(shooter_msg)
-            self.rps = 0
+        
             
 
     def save_callback(self, save_msg):
         self.save = save_msg.data
         count = str(self.count)
-        if(self.save == 1):
-            name = str(self.count)
-            read_and_modify_one_block_of_yaml_data(self.file, key=f'point_{self.count}', value=[self.distance, self.speed])
-            self.save = 0
-            print("saved")
-            print(self.count,self.distance, self.speed)
-            self.count = self.count + 1
-               
+        if(self.save == 1 and self.push_save == 0):
+            self.push_save = 1
+            if(self.saved == 0):
+                self.saved = 1
+                if(self.distance>=0.2 and self.distance<=0.8):
+                    name = str(self.count)
+                    read_and_modify_one_block_of_yaml_data(self.file, key=f'point_{self.count}', value=[self.distance, self.speed])
+                    self.save = 0
+                    print("saved")
+                    print(self.count,self.distance, self.speed)
+                    self.count = self.count + 1
+                    read_and_modify_one_block_of_yaml_data(self.file, key=f'len_i', value = self.count)
+                elif(self.distance>=1.4 and self.distance<=2.2):
+                    name = str(self.count)
+                    read_and_modify_one_block_of_yaml_data(self.file1, key=f'point_{self.count}', value=[self.distance, self.speed])
+                    self.save = 0
+                    print("saved")
+                    print(self.count,self.distance, self.speed)
+                    self.count = self.count + 1
+                    read_and_modify_one_block_of_yaml_data(self.file2, key=f'len_i', value = self.count)
+                elif(self.distance>0.8 and self.distance<1.4):
+                    name = str(self.count)
+                    read_and_modify_one_block_of_yaml_data(self.file2, key=f'point_{self.count}', value=[self.distance, self.speed])
+                    self.save = 0
+                    print("saved")
+                    print(self.count,self.distance, self.speed)
+                    self.count = self.count + 1
+                    read_and_modify_one_block_of_yaml_data(self.file2, key=f'len_i', value = self.count)
+
+
+        elif(self.save == 0 and self.push_save == 1):
+            self.push_save = 0
+            self.saved = 0
+
+    def speed_shooter(self, x):
+        if(x >= 0.2 and x<=0.8): # Pole 1meter
+            y = 78.61 * x + 468.9
+        elif(x >= 1.4 and x<= 2.2 ): # Pole 1.5 meter
+            y = 102.8*x + 718.6
+        elif(x > 0.8 and x<1.4): # Pole 1meter on the next side
+            y = 172.3*x + 479.5
+        return y
 
         
 
