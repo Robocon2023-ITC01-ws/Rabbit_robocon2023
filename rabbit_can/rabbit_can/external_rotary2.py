@@ -36,6 +36,7 @@ class RotaryNode(Node):
         self.imu_subscriber = self.create_subscription(Imu, 'imu/data2', self.imu_callback, 10)
 
         self.odom_publisher = self.create_publisher(Float32MultiArray, 'odometry_rotary', 10)
+        self.rotary_input = self.create_publisher(UInt16MultiArray, 'input_rotary', 10)
 
         self.rotary_timer = self.create_timer(0.0333, self.rotary_calculation)
         self.odom_timer = self.create_timer(0.02, self.odom_callback)
@@ -68,6 +69,7 @@ class RotaryNode(Node):
 
 
     def rotary_callback(self, tick_msg):
+        rot_in = UInt16MultiArray()
         self.rotary_data[0] = tick_msg.data[0]
         self.rotary_data[1] = tick_msg.data[1]
 
@@ -86,6 +88,10 @@ class RotaryNode(Node):
                     self.diff_rotary[i] = self.diff_rotary[i] + 65535
 
             self.curr_state = self.prev_state + self.f(self.prev_state, self.diff_rotary*2*np.pi/self.ppr)
+
+            rot_in.data = [self.diff_rotary[0], self.diff_rotary[1]]
+
+            self.rotary_input.publish(rot_in)
 
             self.prev_state = self.curr_state
 

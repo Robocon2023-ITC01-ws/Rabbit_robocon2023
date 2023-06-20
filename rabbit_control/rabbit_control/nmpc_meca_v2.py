@@ -1,150 +1,135 @@
-import rclpy
+import rclpy 
 import numpy as np
 import casadi as ca
-import time
 
-from rabbit_control.nmpc_solver import NMPCSolver
-from rabbit_control.bezier_path import calc_4points_bezier_path, calc_bezier_path
-from rabbit_control.rabbit_omni import RabbitModel
+
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, String
-from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Imu
+from geometry_msgs.msg import Twist
+from rabbit_control.rabbit_meca import RabbitModel
+from rabbit_control.nmpc_solver import NMPCSolver
+from rabbit_control.bezier_path import calc_bezier_path
 from tf_transformations import euler_from_quaternion
 
 
 class NMPCRabbit(Node):
 
     def __init__(self):
-        super().__init__('nmpc_rabbit')
-        ## NMPC Params
 
-        self.lowX =  [-6, -6, -3.14]
-        self.highX = [ 6,  6,  3.14]
+        super().__init__('nmpc_node')
 
-        self.lowU = -10
-        self.highU = 10
+        ### NMPC Params
 
-        self.mat_Q = [750, 750, 900]
-        self.mat_R = [1, 1, 1, 1]
+        self.lowX = [-6, -6, -3.14]
+        self.highX =[ 6,  6,  3.14]
 
+        self.lowU = -20
+        self.highU = 20
+
+        self.Q = [750, 750, 900]
+        self.R = [0.1, 0.1, 0.1, 0.1]
+
+        self.N = 50
+        self.dt = 0.1
+
+        self.rabbit_model = RabbitModel()
+        self.nmpc_mode = NMPCSolver(
+            self.lowX, self.highX,
+            self.lowU, self.highU,
+            self.Q, self.R, self.N, self.dt
+        )
+
+        ### MECANUM Params
         self.r = 0.0475 
         self.lx = 0.1925
         self.ly = 0.1775
 
-        self.N = 50
-        self.dt = 0.1
-        self.t0 = 0
-        self.mpciter = 0
-        self.speed_up = lambda t: 10*(1-np.exp(-2*t))
-        self.state_status = None
-        self.vx =  0.0
-        self.vy = 0.0
-        self.vyaw = 0.0
-
-        ## ROS Setup
-        mpc_timer = 0.1
-        control_timer = 0.01
-        self.wheel_subscriber = self.create_subscription(Float32MultiArray, 'odom_wheel', self.odom_callback, 10)
-        # self.rotary_subscriber = self.create_subscription(Float32MultiArray, 'odometry_rotary', self.odom_callback, 10)
-        self.control_subscriber = self.create_subscription(Float32MultiArray, 'feedback_controls', self.controls_callback, 10)
-        self.quaternion_subscriber = self.create_subscription(Imu, 'imu/data2', self.quaternion_callback, 10)
-        self.state_subscriber = self.create_subscription(String, 'controller_state', self.state_callback, 10)
-        self.control_publisher = self.create_publisher(Float32MultiArray, 'input_controls', 10)
-        self.path_subscriber = self.create_subscription(Float32MultiArray, 'beizer_path', self.path_callback, 10)
-        self.twist_subscriber = self.create_subscription(Twist, 'cmd_vel', self.twist_callback, 10)
-        self.control_timer = self.create_timer(control_timer, self.control_timer_pub)
-        self.solver_time = self.create_timer(0.1, self.nmpc_solver)
-
-        # Euler angle
-
-
-        ## Simulation
-        ### States
+        ### Set up NMPC ###
         self.current_x = 0.0
         self.current_y = 0.0
         self.current_yaw = 0.0
-        self.feedback_states = np.array([
-                                        self.current_x,
-                                        self.current_y,
-                                        self.current_yaw
-                                    ], dtype=np.float64)
-        self.current_states = self.feedback_states.copy()
-        ## Controls
+
+        self.feedback_states = np.array([self.current_x, self.current_y, self.current_yaw], dtype=np.float64)
+        
         self.current_w1 = 0.0
         self.current_w2 = 0.0
         self.current_w3 = 0.0
         self.current_w4 = 0.0
-        self.feedback_controls = np.array([
-                                        self.current_w1,
-                                        self.current_w2,
-                                        self.current_w3,
-                                        self.current_w4
-                                    ], dtype=np.float64)
 
-        self.states = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
-        self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
-        self.next_trajectories = self.states.copy()
-        self.next_controls = self.controls.copy()
-        ## Path Planner goal
+        self.feedback_controls = np.array([self.current_w1, self.current_w2, self.current_w3, self.current_w4], dtype=np.float64)
+
+        self.state = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
+        self.control = np.tile(self.feedback_controls.reshape(4, 1), self.N)
+        self.next_trajectories = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
+        self.next_controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
+
+        self.f, self.solver, self.args = self.nmpc_mode.nmpc_setup()
+
+        ### Set up trajectories ###
+
+        self.startX = [0.0, 0.0, 0.0]
+        self.endX = [0.0, 0.0, 0.0]
+        self.n_points = 100
+        self.offset = 3.0
+        self.N_IND_SEARCH = 10
+
+        self.path_x = np.zeros((1, self.n_points))
+        self.path_y = np.zeros((1, self.n_points))
+        self.path_yaw = np.zeros((1, self.n_points))
+
+        self.goal_path = np.vstack([self.path_x, self.path_y, self.path_yaw])
+
+        ### Set up params for state switches ###
+        self.state_status = None
+        self.cmd_goal = None
+        self.norm_cond = 0.0
+        self.speed_up = lambda t: 20*(1-np.exp(-2*t))
+
+        self.vx = 0.0
+        self.vy = 0.0
+        self.vyaw = 0.0
+
         self.goal_x = 0.0
         self.goal_y = 0.0
         self.goal_yaw = 0.0
-        self.goal_flag = False
-        self.hold_state = True
 
-
-        ## Solver
-        self.f, self.solver, self.args = NMPCSolver(
-            self.lowX, self.highX, self.lowU, self.highU,
-            self.mat_Q, self.mat_R, self.N, self.dt
-        ).nmpc_setup()
-
-        self.rabbit_model = RabbitModel()
-        ## Euclidean norm condition
-        self.norm_cond = 0.0
-
-        # Optimal Control
+        ### Set up for optimal solution ###
         self.opt_u1 = 0.0
         self.opt_u2 = 0.0
         self.opt_u3 = 0.0
         self.opt_u4 = 0.0
 
-    def forward_kinematic(self, u1, u2,u3, u4, theta):
+        self.n_u1 = 0.0
+        self.n_u2 = 0.0
+        self.n_u3 = 0.0
+        self.n_u4 = 0.0
 
-        rot_mat = np.array([
-            [np.cos(theta), np.sin(theta), 0],
-            [-np.sin(theta), np.cos(theta), 0],
-            [0, 0, 1]
-        ], dtype=np.float64)
 
-        J = (self.r/4)*np.array([
-            [-1, 1, -1, 1],
-            [1, 1, -1, -1],
-            [1/(self.lx+self.ly), 1/(self.lx+self.ly), 1/(self.lx+self.ly), 1/(self.lx+self.ly)]
-        ], dtype=np.float64)
+        ### Set up ros2 ###
+        #### Subscriber ####
+        self.odom_subscriber = self.create_subscription(Float32MultiArray, 'odom_wheel', self.odom_callback, 10)
+        self.imu_subscriber = self.create_subscription(Imu, 'imu/data2', self.imu_callback, 10)
+        self.control_subscriber = self.create_subscription(Float32MultiArray, 'feedback_control', self.control_callback, 10)
+        self.path_subscriber = self.create_subscription(Float32MultiArray, 'beizer_path', self.path_callback, 10)
+        self.command_subscriber = self.create_subscription(String, 'cmd_goal', self.command_callback, 10)
+        self.controller_state = self.create_subscription(String, 'controller_state', self.status_callback, 10)
+        self.twist_subscriber = self.create_subscription(Twist, 'cmd_vel', self.twist_callback, 10)
+        #### Publisher ####
+        self.input_controls = self.create_publisher(Float32MultiArray, 'input_controls', 10)
 
-        for_vec = rot_mat.T@J@np.array([u1, u2, u3, u4], dtype=np.float64)
+        #### Timer ROS ####
+        # self.control_timer = self.create_timer(0.01, self.control_timer_cb)
+        self.mpc_timer = self.create_timer(0.1, self.nmpc_solver)
 
-        return for_vec
-    
-    def inverse_kinematic(self, vx, vy, vyaw):
 
-        J_inv = (1/self.r)*np.array([
-            [-1, 1, -1, 1],
-            [1, 1, -1, -1],
-            [(self.lx+self.ly), (self.lx+self.ly), (self.lx+self.ly), (self.lx+self.ly)]
-        ], dtype=np.float64).T
 
-        inv_vec = J_inv@np.array([vx, vy, vyaw])
+    def imu_callback(self, imu_msg):
 
-        return inv_vec[0], inv_vec[1], inv_vec[2], inv_vec[3]
-
-    def quaternion_callback(self, quat_msg):
-        q1 = quat_msg.orientation.x
-        q2 = quat_msg.orientation.y
-        q3 = quat_msg.orientation.z
-        q4 = quat_msg.orientation.w
+        q1 = imu_msg.orientation.x
+        q2 = imu_msg.orientation.y
+        q3 = imu_msg.orientation.z
+        q4 = imu_msg.orientation.w
 
         orient_list = [q1, q2, q3, q4]
 
@@ -155,117 +140,99 @@ class NMPCRabbit(Node):
     def odom_callback(self, odom_msg):
         self.current_x = odom_msg.data[0]
         self.current_y = odom_msg.data[1]
-        # self.current_yaw = odom_msg.z
-
-
+    
         self.feedback_states = np.array([
-                                        self.current_x,
-                                        self.current_y,
-                                        self.current_yaw
-                                    ])
-        
-        if self.hold_state:
-            self.goal_x = self.current_x
-            self.goal_y = self.current_y
-            self.goal_yaw = self.current_yaw
+            self.current_x, self.current_y, self.current_yaw
+        ], dtype=np.float64)
 
         self.next_trajectories[:, 0] = self.feedback_states
 
-    def twist_callback(self, msg):
-        self.vx = msg.linear.x
-        self.vy = msg.linear.y
-        self.vyaw = msg.angular.z
+        self.state = np.tile(self.feedback_states.reshape(3, 1), self.N+1)
 
-    def state_callback(self, msg):
-        
-        self.state_status = msg.data
-
-
-    def controls_callback(self, con_msg):
-
+    def control_callback(self, con_msg):
         self.current_w1 = con_msg.data[0]
         self.current_w2 = con_msg.data[1]
         self.current_w3 = con_msg.data[2]
         self.current_w4 = con_msg.data[3]
 
         self.feedback_controls = np.array([
-                                    self.current_w1,
-                                    self.current_w2,
-                                    self.current_w3,
-                                    self.current_w4
-                                    ])
+            self.current_w1, self.current_w2, self.current_w3, self.current_w4
+        ], dtype=np.float64)
 
+        self.control = np.tile(self.feedback_controls.reshape(4, 1), self.N)
 
-    def pi_2_pi(self, angle):
-        while(angle > np.pi):
-            angle = angle - 2.0 * np.pi
+    def command_callback(self, cmd_msg):
+        self.cmd_goal = cmd_msg.data
 
-        while(angle < -np.pi):
-            angle = angle + 2.0 * np.pi
+    def status_callback(self, status_msg):
+        self.state_status = status_msg.data
 
-        return angle
+    def twist_callback(self, twist_msg):
+        self.vx = twist_msg.linear.x
+        self.vy = twist_msg.linear.y
+        self.vyaw = twist_msg.angular.z
 
-    
     def path_callback(self, path_msg):
-
         self.goal_x = path_msg.data[0]
         self.goal_y = path_msg.data[1]
         self.goal_yaw = path_msg.data[2]
 
-        if path_msg.data is not None:
-            self.goal_flag = True
-            self.hold_state = False
-        elif path_msg.data is None:
-            self.goal_flag = False
-            self.hold_state = True
-
-
+    
     def nmpc_solver(self):
-        if self.state_status == "manual":
-            self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4 = self.inverse_kinematic(self.vx, self.vy, self.vyaw)
+        # if self.cmd_goal == "reset":
 
-            self.goal_states = np.tile(np.array([self.current_x, self.current_y, self.current_yaw]).reshape(3, 1), self.n_points)
-
-            print("In Manual Mode")
-        elif self.state_status == "auto":
-            goal_states = np.array([
-                self.goal_x,
-                self.goal_y,
-                self.goal_yaw
-            ], dtype=np.float64)
-
-
-            if np.linalg.norm(goal_states-self.feedback_states, 2) > 0.1:
-                self.norm_cond += 0.03
-                self.args['lbx'][3*(self.N+1):] = -self.speed_up(self.norm_cond)
-                self.args['ubx'][3*(self.N+1):] = self.speed_up(self.norm_cond)
+        #     self.goal_path = np.zeros((3, self.n_points))
         
-            elif np.linalg.norm(goal_states-self.feedback_states, 2) < 0.01:
+        if self.state_status == "manual":
+            con_msg = Float32MultiArray()
+            inv_vec = self.rabbit_model.inverse_kinematic(self.vx, self.vy, self.vyaw, 0.0, "numpy")
+
+            self.n_u1 = inv_vec[0]
+            self.n_u2 = inv_vec[1]
+            self.n_u3 = inv_vec[2]
+            self.n_u4 = inv_vec[3]
+
+            print("IN MANUAL MODE", self.n_u1, self.n_u2, self.n_u3, self.n_u4)
+
+            con_msg.data = [float(self.n_u1), float(self.n_u2), float(self.n_u3), float(self.n_u4)]
+            self.input_controls.publish(con_msg)
+
+        elif self.state_status == "auto":
+
+            con_msg = Float32MultiArray()
+
+            if np.linalg.norm(self.goal_path[:, -1]-self.feedback_states, 2) > 0.1:
+                self.norm_cond += 0.06
+                self.args['lbx'][3*(self.N+1):] = -self.speed_up(self.norm_cond)
+                self.args['ubx'][3*(self.N+1):] =  self.speed_up(self.norm_cond)
+
+            elif np.linalg.norm(self.goal_path[:, -1]-self.feedback_states, 2) < 0.01:
                 self.norm_cond = 0.0
+
             else:
                 self.args['lbx'][3*(self.N+1):] = self.lowU
                 self.args['ubx'][3*(self.N+1):] = self.highU
                 self.norm_cond = 0.0
-
-            self.args['x0'] = np.concatenate([
-                self.states.T.reshape(-1, 1),
-                self.controls.T.reshape(-1, 1)
-            ])
 
             self.args['p'] = np.concatenate([
                 self.next_trajectories.T.reshape(-1, 1),
                 self.next_controls.T.reshape(-1, 1)
             ])
 
+            self.args['x0'] = np.concatenate([
+                self.state.T.reshape(-1, 1),
+                self.control.T.reshape(-1, 1)
+            ])
+
             sol = self.solver(
-                x0= self.args['x0'],
-                p = self.args['p'],
-                lbx=self.args['lbx'],
-                ubx=self.args['ubx'],
-                lbg=self.args['lbg'],
-                ubg=self.args['ubg'],
-            )
-            
+                    x0= self.args['x0'],
+                    p = self.args['p'],
+                    lbx=self.args['lbx'],
+                    ubx=self.args['ubx'],
+                    lbg=self.args['lbg'],
+                    ubg=self.args['ubg'],
+                )
+        
             sol_x = ca.reshape(sol['x'][:3*(self.N+1)], 3, self.N+1)
             sol_u = ca.reshape(sol['x'][3*(self.N+1):], 4, self.N)
             ################################################## Obtained Optimal Control ##################################################
@@ -274,41 +241,34 @@ class NMPCRabbit(Node):
             self.opt_u3 = sol_u.full()[2, 0]
             self.opt_u4 = sol_u.full()[3, 0]
 
-            ################################################## Apply Next Prediction ##################################################
 
-            for k in range(self.N):
-                self.next_trajectories[:, k+1] = np.array([self.goal_x, self.goal_y, self.goal_yaw])
-                self.next_controls = np.tile(np.array([20, 20, 20, 20], dtype=np.float64).reshape(4, 1), self.N)
+            for j in range(self.N):
 
-            x_next = self.feedback_states + self.dt * self.forward_kinematic(
-                self.feedback_controls[0], self.feedback_controls[1],
-                self.feedback_controls[2], self.feedback_controls[3],
-                self.feedback_states[2]
-            )
+                self.next_trajectories[0, j+1] = self.goal_x
+                self.next_trajectories[1, j+1] = self.goal_y
+                self.next_trajectories[2, j+1] = self.goal_yaw
 
-            self.current_states = x_next
+                self.next_controls = np.tile(np.array([self.highU, self.highU, self.highU, self.highU]).reshape(4, 1), self.N)
 
-            self.states = np.tile(self.current_states.reshape(3, 1), self.N+1)
-            self.controls = np.tile(self.feedback_controls.reshape(4, 1), self.N)
+            con_msg.data = [float(self.opt_u1), float(self.opt_u2), float(self.opt_u3), float(self.opt_u4)]
 
-            # print(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4)
-            print("In Auto Mode")
+            self.input_controls.publish(con_msg)
+        
 
 
-    def control_timer_pub(self):
-        con_msg = Float32MultiArray()
 
-        con_msg.data = [self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4]
-        self.control_publisher.publish(con_msg)
 
 
 def main(args=None):
+
     rclpy.init(args=args)
 
-    rabbit_go = NMPCRabbit()
+    nmpc_node = NMPCRabbit()
 
-    rclpy.spin(rabbit_go)
-    rabbit_go.destroy_node()
+    rclpy.spin(nmpc_node)
+
+    nmpc_node.destroy_node()
+
     rclpy.shutdown()
 
 if __name__ == "__main__":

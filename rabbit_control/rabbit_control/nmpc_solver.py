@@ -13,8 +13,9 @@ class NMPCSolver:
         self.lowU = lowU
         self.highU = highU
         
-        self.lx = 0.20
-        self.ly = 0.20
+        self.r = 0.0475 
+        self.Lx = 0.1925
+        self.Ly = 0.1775
         
         self.Q = Q
         self.R = R
@@ -56,21 +57,21 @@ class NMPCSolver:
         cost_fn = 0.0
         g = X[:, 0] - X_ref[:, 0]
 
-        rot_mat = ca.vertcat(
-             ca.horzcat(ca.cos(theta), ca.sin(theta), 0),
-             ca.horzcat(-ca.sin(theta), ca.cos(theta), 0),
-             ca.horzcat(0, 0, 1)
-        )
+        # rot_mat = ca.vertcat(
+        #      ca.horzcat(ca.cos(theta), ca.sin(theta), 0),
+        #      ca.horzcat(-ca.sin(theta), ca.cos(theta), 0),
+        #      ca.horzcat(0, 0, 1)
+        # )
 
-        J = (0.05/4)*ca.DM([
-            [1, 1, 1, 1],
-            [-1, 1, 1, -1],
-            [-1/(self.lx+self.ly), 1/(self.lx+self.ly), -1/(self.lx+self.ly), 1/(self.lx+self.ly)]
-        ])
+        # J = (0.05/4)*ca.DM([
+        #     [1, 1, 1, 1],
+        #     [-1, 1, 1, -1],
+        #     [-1/(self.lx+self.ly), 1/(self.lx+self.ly), -1/(self.lx+self.ly), 1/(self.lx+self.ly)]
+        # ])
 
-        rhs = rot_mat.T@J@controls
+        # rhs = rot_mat.T@J@controls
         
-        # rhs = self.rabbit_model.forward_kinematic_tran(u1, u2, u3, u4, theta, "sym")
+        rhs = self.rabbit_model.forward_kinematic(u1, u2, u3, u4, theta, "sym")
 
         f = ca.Function('f', [states, controls], [rhs])
 
@@ -81,18 +82,6 @@ class NMPCSolver:
             st_next = X[:, k+1]
             st_euler = X[:, k] + self.dt*f(X[:,k], U[:, k])
             g = ca.vertcat(g, st_next-st_euler)
-
-        #for k in range(self.N):
-        #    st_err = X[:, k]-X_ref[:, k]
-        #    con_err = U[:, k]-U_ref[:, k]
-        #    cost_fn = cost_fn + st_err.T@Q@st_err + con_err.T@R@con_err
-        #    st_next = X[:, k+1]
-        #    k1 = f(st_err, con_err)
-        #    k2 = f(st_err + self.dt/2*k1, con_err)
-        #    k3 = f(st_err + self.dt/2*k2, con_err)
-        #    k4 = f(st_err + self.dt*  k3, con_err)
-        #    st_next_RK4 = X[:, k+1] + (self.dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
-        #    g = ca.vertcat(g, st_next - st_next_RK4)
 
         cost_fn = cost_fn + (X[:, self.N]-X_ref[:, self.N]).T@Q@(X[:, self.N]-X_ref[:, self.N])
 

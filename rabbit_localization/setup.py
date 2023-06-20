@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
             'localization = rabbit_localization.mhe_pubsub:main',
             'yaw = rabbit_localization.testing_yaw:main',
+            'nmhe_meca = rabbit_localization.nmhe_meca:main'
         ],
     },
 )
