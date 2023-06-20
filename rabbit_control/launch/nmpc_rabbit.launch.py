@@ -9,7 +9,8 @@ def generate_launch_description():
     node1 = Node(
         package='rabbit_control',
         name='nmpc_rabbit',
-        executable='nmpc_omni',
+        executable='nmpc_meca',
+        output='screen'
     )
 
     node2 = Node(

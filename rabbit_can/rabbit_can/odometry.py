@@ -4,7 +4,7 @@ import can
 import rclpy
 
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray, UInt16MultiArray
+from std_msgs.msg import Float32MultiArray, UInt16MultiArray, String
 from sensor_msgs.msg import Imu
 from tf_transformations import euler_from_quaternion
 from model_kinematic.kinematic import *
@@ -16,8 +16,6 @@ class RotaryNode(Node):
         super(RotaryNode, self).__init__('rotary_node')
 
         self.r = 0.029
-        self.lx = 0.145
-        self.ly = 0.145
         self.ppr = 8200
         self.wheel_ppr = 912
 
@@ -25,8 +23,8 @@ class RotaryNode(Node):
 
         self.yaw = 0.0
 
-        self.prev_state = np.zeros(3)
-        self.curr_state = np.zeros(3)
+        self.prev_state = np.zeros(2)
+        self.curr_state = np.zeros(2)
         self.prev_tick = np.zeros(2)
         self.curr_tick = np.zeros(2)
 
@@ -49,12 +47,14 @@ class RotaryNode(Node):
         self.hist_yaw = [0]
 
         self.wheel_init = True
+        self.retry_status = None
 
         self.kinematic = kinematic()
 
         self.wheel_subscriber = self.create_subscription(UInt16MultiArray, 'wheel_tick', self.wheel_callback, 10)
         self.tick_subscriber = self.create_subscription(UInt16MultiArray, 'external_rotary', self.rotary_callback, 10)
         self.imu_subscriber = self.create_subscription(Imu, 'imu/data2', self.imu_callback, 10)
+        self.state_subscriber = self.create_subscription(String, 'retry_state', self.retry_callback, 10)
 
         self.odom_publisher = self.create_publisher(Float32MultiArray, 'odometry_rotary', 10)
         self.wheel_odom = self.create_publisher(Float32MultiArray, 'odom_wheel', 10)
@@ -77,18 +77,15 @@ class RotaryNode(Node):
 
         return for_vec
     
-    def calc_dyaw(self, yaw):
-        for i in range(len(yaw)-1):
-            dyaw = yaw[i+1] - yaw[i]
-
-        return dyaw
-    
     def input_callback(self):
         input_msg = Float32MultiArray()
 
         input_msg.data = [float(self.input_cons[0]), float(self.input_cons[1]), float(self.input_cons[2]), float(self.input_cons[3])]
 
         self.input_publisher.publish(input_msg)
+
+    def retry_callback(self, re_msg):
+        self.retry_status = re_msg.data
     
     def imu_callback(self, imu_msg):
 
@@ -102,13 +99,15 @@ class RotaryNode(Node):
         roll, pitch , yaw = euler_from_quaternion(orient_list)
 
         self.yaw = yaw
-        self.curr_yaw = yaw
+        # self.curr_yaw = yaw
 
-        self.dyaw = self.curr_yaw - self.prev_yaw
+        # self.dyaw = self.curr_yaw - self.prev_yaw
 
-        self.prev_yaw = self.curr_yaw
+        # self.prev_yaw = self.curr_yaw
 
         self.hist_yaw.append(yaw)
+
+        self.dyaw = self.hist_yaw[-1]-self.hist_yaw[-2]
 
     def wheel_callback(self, tick_msg):
         odom_msg = Float32MultiArray()
@@ -138,35 +137,17 @@ class RotaryNode(Node):
         # print(self.wheel_vel)
 
         self.prev_wheel_tick = self.curr_wheel_tick
-
+ 
 
     def rotary_model(self, t1, t2, theta):
 
         u1 = t1 * 2 * np.pi / self.ppr
         u2 = t2 * 2 * np.pi / self.ppr
 
-        rot_mat = np.array([
-            [np.cos(theta), -np.sin(theta), 0],
-            [np.sin(theta),  np.cos(theta), 0],
-            [0, 0, 1]
+        for_vec = (self.r)*np.array([
+            u1*np.cos(theta)-u2*np.sin(theta),
+            u1*np.sin(theta)+u2*np.cos(theta),
         ], dtype=np.float64)
-
-        J = (self.r)*np.array([
-            [1, 0],
-            [0, 1],
-            [1/(self.ly), 0]
-        ], dtype=np.float64)
-
-        for_vec = rot_mat@J@np.array([u1, u2], dtype=np.float64)
-
-        for_vec[0] = for_vec[0] - self.ly*self.dyaw
-
-        # for_vec = (self.r)*np.array([
-        #     [u1*np.cos(theta) - u2*np.sin(theta)],
-        #     [u1*np.sin(theta) + u2*np.cos(theta)],
-        #     [                         u1/self.ly]], dtype=np.float64)
-
-        # for_vec = J_m@np.array([u1, u2], dtype=np.float64)
 
         return for_vec
 
@@ -186,8 +167,9 @@ class RotaryNode(Node):
                     self.diff_rotary[i] = self.diff_rotary[i] - 65535
                 elif (self.diff_rotary[i] < -32768):
                     self.diff_rotary[i] = self.diff_rotary[i] + 65535
-            self.curr_state = self.prev_state + self.rotary_model(self.diff_rotary[0], self.diff_rotary[1], self.yaw)
-
+            #self.curr_state[0] = self.prev_state[0]+ self.rotary_model(self.diff_rotary[0], self.diff_rotary[1], self.yaw)[0]
+            #self.curr_state[1] = self.prev_state[1]+ self.rotary_model(self.diff_rotary[0], self.diff_rotary[1], self.yaw)[1]
+            self.curr_state = self.prev_state+ self.rotary_model(self.diff_rotary[0], self.diff_rotary[1], self.yaw)
             odom_msg.data = [float(self.curr_state[0]), float(self.curr_state[1])]
 
             self.odom_publisher.publish(odom_msg)

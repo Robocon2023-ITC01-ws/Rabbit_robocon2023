@@ -4,7 +4,8 @@ import numpy as np
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, String
 from sensor_msgs.msg import Imu, Joy
-from rabbit_control.bezier_path import calc_bezier_path, calc_4points_bezier_path
+from rabbit_control.bezier_path import calc_bezier_path
+from rabbit_control.rabbit_meca import RabbitModel
 from tf_transformations import euler_from_quaternion
 import time
 
@@ -21,8 +22,9 @@ class TrajectoryGenerator(Node):
 
         self.n_points = 100
 
-        self.current_states = np.array([self.current_x, self.current_y, self.current_yaw])
-        self.startX = [self.current_x, self.current_y, self.current_yaw]
+        self.feedback_states = np.array([self.current_x, self.current_y, self.current_yaw])
+        self.current_states = self.feedback_states.copy()
+        self.startX = [0.0, 0.0, 0.0]
 
         self.goal_x = 0.0
         self.goal_y = 0.0
@@ -41,12 +43,14 @@ class TrajectoryGenerator(Node):
         self.dt = 0.1
         self.prev_index = 0
         self.next_index = 0
-        # self.pred_index = self.pred_index+self.next_index
         self.N_IND_SEARCH = 10
         self.target_ind = 0
         self.index = 0
+        self.pred_index = self.index + self.target_ind
 
-        self.start_cond = False
+        self.status_state = None
+
+        self.rabbit_model = RabbitModel()
 
         self.path_x = np.tile(self.current_x, self.n_points)
         self.path_y = np.tile(self.current_y, self.n_points)
@@ -56,13 +60,13 @@ class TrajectoryGenerator(Node):
 
         self.target_ind = self.calc_index_trajectory(self.current_x, self.current_y, self.goal_states[0], self.goal_states[1], 1)
 
-
         self.odom_subscriber = self.create_subscription(Float32MultiArray, 'odom_wheel', self.odom_callback, 10)
         self.input_subscriber = self.create_subscription(Float32MultiArray, 'input_controls', self.controls_callback, 10)
         self.imu_subscriber = self.create_subscription(Imu, 'imu/data2', self.imu_callback, 10)
-        # self.goal_subscriber = self.create_subscription(Float32MultiArray, 'path_gen', self.goal_callback, 10)
-        # self.control_subscriber = self.create_subscription(Float32MultiArray, 'feedback_controls', self.controls_callback, 10)
+        self.goal_subscriber = self.create_subscription(Float32MultiArray, 'path_gen', self.goal_callback, 10)
+        self.control_subscriber = self.create_subscription(Float32MultiArray, 'feedback_controls', self.controls_callback, 10)
         self.goal_cmd = self.create_subscription(String, 'cmd_goal', self.cmd_goal_callback, 10)
+        self.status_subscriber = self.create_subscription(String, 'controller_states', self.states_callback, 10)
 
         self.path_publisher = self.create_publisher(Float32MultiArray, 'beizer_path', 10)
         self.joy_subscriber = self.create_subscription(Joy, 'joy', self.joy_callback, 10)
@@ -72,24 +76,6 @@ class TrajectoryGenerator(Node):
         self.axes_list = [0, 0, 0, 0, 0, 0, 0, 0, 0]
         self.buttons_list = [0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-
-    def forward_kinematic(self, u1, u2,u3, u4, theta):
-
-        rot_mat = np.array([
-            [np.cos(theta), np.sin(theta), 0],
-            [-np.sin(theta), np.cos(theta), 0],
-            [0, 0, 1]
-        ], dtype=np.float64)
-
-        J = (self.r/4)*np.array([
-            [-1, 1, -1, 1],
-            [1, 1, -1, -1],
-            [1/(self.lx+self.ly), 1/(self.lx+self.ly), 1/(self.lx+self.ly), 1/(self.lx+self.ly)]
-        ], dtype=np.float64)
-
-        for_vec = rot_mat.T@J@np.array([u1, u2, u3, u4], dtype=np.float64)
-
-        return for_vec
 
 
     def calc_planner(self, start_X, end_X, n_points, offset):
@@ -122,13 +108,16 @@ class TrajectoryGenerator(Node):
         self.current_x = odom_msg.data[0]
         self.current_y = odom_msg.data[1]
 
-        self.current_states = np.array([
+        self.feedback_states = np.array([
             self.current_x,
             self.current_y,
             self.current_yaw
         ])
 
         # self.startX = [self.current_x, self.current_y, self.current_yaw]
+
+    def states_callback(self, status_msg):
+        self.status_state = status_msg.data
 
     def calc_index_trajectory(self, state_x, state_y, cx, cy, pind):
         
@@ -162,27 +151,32 @@ class TrajectoryGenerator(Node):
         self.opt_u4 = con_msg.data[3]
 
 
-    # def goal_callback(self, goal_msg):
-    #     self.goal_x = goal_msg.data[0]
-    #     self.goal_y = goal_msg.data[1]
-    #     self.goal_yaw = goal_msg.data[2]
+    def goal_callback(self, goal_msg):
+        self.goal_x = goal_msg.data[0]
+        self.goal_y = goal_msg.data[1]
+        self.goal_yaw = goal_msg.data[2]
 
-    #     self.endX = [self.goal_x, self.goal_y, self.goal_yaw]
+        self.endX = [self.goal_x, self.goal_y, self.goal_yaw]
 
 
-    #     self.path, _ = self.calc_planner(
-    #          self.startX, self.endX, self.n_points, self.offset
-    #     )
+        self.path, _ = self.calc_planner(
+             self.startX, self.endX, self.n_points, self.offset
+        )
 
-    #     self.path_x = self.path[:, 0]
-    #     self.path_y = self.path[:, 1]
-    #     self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
+        self.path_x = self.path[:, 0]
+        self.path_y = self.path[:, 1]
+        self.path_yaw = np.append(np.arctan2(np.diff(self.path_y), np.diff((self.path_x))), self.goal_yaw)
 
         self.goal_states = np.vstack([self.path_x, self.path_y, self.path_yaw])
 
     def cmd_goal_callback(self, cmd_msg):
+
+        if cmd_msg.data == "reset":
+
+            self.goal_states = np.zeros((3, self.n_points))
+
         if cmd_msg.data == "goal1":
-            self.startX = [self.current_x, self.curernt_y, self.current_yaw]
+            self.startX = [0, 0, 0]
             self.endX = [2.7, 1.5, 1.57]
             self.path, _ = self.calc_planner(
                 self.startX, self.endX, self.n_points, -3.0
@@ -213,7 +207,7 @@ class TrajectoryGenerator(Node):
         start = time.time()
         path_msg = Float32MultiArray()
 
-        self.target_ind = self.calc_index_trajectory(self.current_x, self.current_y, self.goal_states[0], self.goal_states[1], self.target_ind)
+        self.target_ind = self.calc_index_trajectory(self.current_states[0], self.current_states[1], self.goal_states[0, :], self.goal_states[1, :], self.target_ind)
 
         travel = 1.0
 
@@ -221,19 +215,25 @@ class TrajectoryGenerator(Node):
 
         for k in range(self.N):
 
-            vx, vy, vyaw = self.forward_kinematic(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, 0.0)
+            for_vec = self.rabbit_model.forward_kinematic(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, 0.0, "numpy")
+
+            vx = for_vec[0]
+            vy = for_vec[1]
 
             v = np.sqrt(vx**2+vy**2)
 
             travel += abs(v) * self.dt
-            dind = int(round(travel / 1.0))
+            self.dind = int(round(travel / 1.0))
 
-            pred_index = self.target_ind + self.index
+            self.pred_index = self.target_ind + self.index
+
+            if self.pred_index >= self.goal_states.shape[1]:
+                self.pred_index = self.goal_states.shape[1]-1
 
             if (self.target_ind + self.index) < len(self.path_x):
-                path_msg.data = [float(self.goal_states[0, pred_index]),
-                                 float(self.goal_states[1, pred_index]),
-                                 float(self.goal_states[2, pred_index])]
+                path_msg.data = [float(self.goal_states[0, self.pred_index]),
+                                 float(self.goal_states[1, self.pred_index]),
+                                 float(self.goal_states[2, self.pred_index])]
             
             else:
                 path_msg.data = [float(self.goal_states[0, len(self.path_x)-1]),
@@ -242,14 +242,14 @@ class TrajectoryGenerator(Node):
             
             self.path_publisher.publish(path_msg)
 
-        self.next_index = dind
+        self.next_index = self.dind
         if (self.next_index-self.prev_index) >= 2:
-            self.index += 2
+            self.index += 3
         
-        if pred_index >= self.goal_states.shape[1]:
-            pred_index = self.goal_states.shape[1]-1
+        self.current_states = self.feedback_states + self.rabbit_model.forward_kinematic(self.opt_u1, self.opt_u2, self.opt_u3, self.opt_u4, self.current_yaw, "numpy") * self.dt
+    
 
-        print(pred_index)
+        print(self.pred_index)
 
 
 def main(args=None):
