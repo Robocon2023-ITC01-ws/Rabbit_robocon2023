@@ -147,8 +147,8 @@ class NMHE_Rabbit(Node):
         sol_x = ca.reshape(sol['x'][:3*(self.N_mhe+1)], 3, self.N_mhe+1)
         sol_u = ca.reshape(sol['x'][3*(self.N_mhe+1):], 4, self.N_mhe)
 
-        self.mhe_x = sol_x.full()[0, 0]
-        self.mhe_y = sol_x.full()[1, 0]
+        self.mhe_x = sol_x.full()[0, -1]
+        self.mhe_y = sol_x.full()[1, -1]
 
         print(self.mhe_x, self.mhe_y)
 
