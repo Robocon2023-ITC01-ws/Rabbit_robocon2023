@@ -79,9 +79,9 @@ class ShooterNode(Node):
         button_command = int(button_msg.data)
         if(button_command == 1 ):
             self.laser_sub = self.create_subscription(UInt16, 'laser', self.laser_callback, 10)
-            self.distance = (5.499 - 0.241)/(3516 - 9)*(self.laser_data - 9) + 0.241
-            left = self.map(self.adjust_left, 1, -1, 0 ,1)
-            right = self.map(self.adjust_right, 1, -1, 0, 1)
+            self.distance = (3.516 - 0.214)/(2194 - 10)*(self.laser_data - 10) + 0.214
+            left = self.map(self.adjust_left, 1, -1, 0 ,0.02)
+            right = self.map(self.adjust_right, 1, -1, 0, 0.02)
             self.adjust = self.distance + (right - left)
             if (self.adjust <0):
                 self.adjust = 0

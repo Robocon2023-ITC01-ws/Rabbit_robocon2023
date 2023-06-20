@@ -26,6 +26,8 @@ setup(
             'param = rabbit_shooter.param_shooter:main',
             'test = rabbit_shooter.shooter_test:main',
             'data = rabbit_shooter.data_shooter:main',
+            'can = rabbit_shooter.can_shooter:main',
+            'run = rabbit_shooter.run_shooter:main',
         ],
     },
 )
